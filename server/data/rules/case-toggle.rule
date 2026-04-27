@@ -1,0 +1,43 @@
+# case-toggle.rule — case transformations
+# Useful against AD dumps where users capitalise differently
+# Simple transforms
+l
+u
+c
+C
+t
+# Toggle first N characters
+T0
+T1
+T2
+T3
+T4
+T5
+# Capitalise + common suffix
+c$1
+c$2
+c$3
+c$1$2$3
+c$!
+c$2$0$2$4
+c$2$0$2$5
+# Uppercase + common suffix
+u$1
+u$!
+u$1$2$3
+# Reverse case transforms
+r
+rl
+ru
+rc
+# Capitalise + leet
+csa@
+cse3
+csi1
+cso0
+css5
+csa@se3si1so0
+# Title-case-like (capitalise after toggle)
+tc
+tl
+tu

@@ -1,0 +1,35 @@
+# quick-wins.rule — small high-yield set for fast first pass
+# Targets the most statistically common mutations before running heavier rules.
+# Run this first — covers ~60% of crackable hashes in AD dumps.
+:
+l
+u
+c
+r
+$1
+$1$2$3
+$!
+c$1
+c$!
+c$1$2$3
+c$1$2$3$!
+c$2$0$2$4
+c$2$0$2$4$!
+c$2$0$2$3
+c$2$0$2$3$!
+sa@
+se3
+si1
+so0
+csa@
+cse3
+csi1
+cso0
+csa@se3si1so0
+d
+$s
+$ing
+$er
+$1$!
+$2$0$2$4
+$2$0$2$3

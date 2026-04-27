@@ -1,0 +1,40 @@
+# Anvil Agent — example configuration
+# Copy this file to config.toml and edit before running setup.sh
+
+[agent]
+# Human-readable name shown in the dashboard
+name = "Agent-01"
+# Server base URL — must match the server's TLS cert (no trailing slash)
+server_url = "https://YOUR-SERVER-IP-OR-HOSTNAME"
+# API token — filled in automatically by setup.sh after registration
+# Paste manually if registering without the install script
+api_token = ""
+# Seconds between job poll requests
+poll_interval = 5
+# Set true and configure ca_bundle if using a trusted/custom CA cert
+verify_tls = false
+# ca_bundle = "./certs/anvil-ca.crt"
+
+[hashcat]
+# Full path to hashcat binary
+binary = "/usr/bin/hashcat"
+# Additional global hashcat flags appended to every run (space-separated)
+extra_flags = ""
+# Working directory for hashcat temp files and wordlist cache
+# Use a persistent path — NOT /tmp (wiped on reboot)
+workdir = "/var/lib/anvil-agent/workdir"
+# Potfile path (leave empty to use hashcat default)
+potfile = ""
+# Restrict OpenCL device types: "1"=CPU, "2"=GPU, "4"=all
+# Uncomment on GPU machines to force GPU selection
+# opencl_device_types = "2"
+
+[hardware]
+# GPU/CPU monitoring sample interval (seconds)
+sample_interval = 2
+# GPU monitoring backend: "gputil", "nvidia-smi", or "none"
+gpu_backend = "gputil"
+
+[logging]
+level = "INFO"
+file  = "./anvil-agent.log"

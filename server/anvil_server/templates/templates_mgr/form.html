@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}New Template{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-5" x-data="{attackMode:'0', hashSearch:'', manualHashType:''}">
+  <div class="flex items-center gap-3">
+    <a href="/templates" class="text-zinc-500 hover:text-zinc-300 text-sm">← Templates</a>
+    <h1 class="text-xl font-bold text-white">New attack template</h1>
+  </div>
+
+  <form method="post" action="/templates/new" class="space-y-4">
+    <div class="card space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="label">Template name *</label>
+          <input name="name" type="text" required class="input" placeholder="e.g. Quick NTLM dictionary + best64"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="label">Description</label>
+          <input name="description" type="text" class="input" placeholder="When to use this template…"/>
+        </div>
+        <div>
+          <label class="label">Attack mode</label>
+          <select name="attack_mode" class="select" x-model="attackMode">
+            <option value="0">0 – Dictionary</option>
+            <option value="1">1 – Combinator</option>
+            <option value="3">3 – Mask (brute-force)</option>
+            <option value="6">6 – Hybrid wordlist+mask</option>
+            <option value="7">7 – Hybrid mask+wordlist</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Hash type <span class="text-zinc-500 text-xs">(blank = auto-detect)</span></label>
+          <input type="text" x-model="hashSearch" placeholder="Search hash types…" class="input mb-1"/>
+          <select name="hash_type" class="select" x-model="manualHashType" size="5">
+            <option value="">— Auto-detect —</option>
+            {% set ns = namespace(cat='') %}
+            {% for mode_id, cat, name in hashcat_modes %}
+            {% if cat != ns.cat %}{% set ns.cat = cat %}
+            <option disabled class="text-zinc-600">── {{ cat }} ──</option>
+            {% endif %}
+            <option value="{{ mode_id }}"
+                    x-show="!hashSearch || '{{ mode_id }} {{ name }}'.toLowerCase().includes(hashSearch.toLowerCase())">
+              {{ mode_id }} – {{ name }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            {% for mode_id, cat, name in favourite_modes %}
+            <button type="button" @click="manualHashType='{{ mode_id }}'"
+                    :class="manualHashType=='{{ mode_id }}' ? 'btn-create' : 'btn-secondary'"
+                    class="text-xs px-2 py-0.5">{{ mode_id }} – {{ name }}</button>
+            {% endfor %}
+          </div>
+        </div>
+        <div x-show="['0','1','6','7'].includes(attackMode)">
+          <label class="label">Wordlist</label>
+          <select name="wordlist_id" class="select">
+            <option value="">— None —</option>
+            {% for wl in wordlists %}
+            <option value="{{ wl.id }}">{{ wl.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div x-show="['3','6','7'].includes(attackMode)">
+          <label class="label">Mask</label>
+          <input name="mask" type="text" class="input font-mono" placeholder="e.g. ?u?l?l?l?d?d?s"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="label">Extra flags</label>
+          <input name="extra_flags" type="text" class="input font-mono text-xs" placeholder="e.g. --increment"/>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center justify-between">
+      <a href="/templates" class="btn-secondary text-sm">Cancel</a>
+      <button type="submit" class="btn-save">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        Save template
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

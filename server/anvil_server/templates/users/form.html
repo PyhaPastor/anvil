@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}New User{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto space-y-5">
+  <div class="flex items-center gap-3">
+    <a href="/users" class="text-zinc-500 hover:text-zinc-300 text-sm">← Users</a>
+    <h1 class="text-xl font-bold text-white">New user</h1>
+  </div>
+
+  <form method="post" action="/users/new" class="card space-y-4">
+    <div>
+      <label class="label">Username</label>
+      <input name="username" type="text" required class="input" autocomplete="off"
+             pattern="[a-zA-Z0-9_\-]{2,64}" title="2-64 characters, letters/numbers/underscore/dash"/>
+    </div>
+    <div>
+      <label class="label">Email</label>
+      <input name="email" type="email" required class="input" autocomplete="off"/>
+    </div>
+    <div>
+      <label class="label">Initial password <span class="text-zinc-500 text-xs">(user will be prompted to change this)</span></label>
+      <input name="password" type="password" required minlength="12" class="input" autocomplete="new-password"/>
+    </div>
+    <div>
+      <label class="label">Role</label>
+      <select name="role" class="select">
+        {% for r in roles %}
+        <option value="{{ r.value }}">{{ r.value }}</option>
+        {% endfor %}
+      </select>
+      <div class="mt-2 space-y-1 text-xs text-zinc-500">
+        <p><span class="text-zinc-300">admin</span> — full access, user management, agent management</p>
+        <p><span class="text-zinc-300">analyst</span> — create jobs, view all results including credentials</p>
+        <p><span class="text-zinc-300">viewer</span> — read-only access to jobs and credentials</p>
+        <p><span class="text-zinc-300">presentation</span> — dashboards only, passwords and usernames hidden</p>
+      </div>
+    </div>
+    <div class="flex items-center justify-between pt-2 border-t border-theme">
+      <a href="/users" class="btn-secondary text-sm">Cancel</a>
+      <button type="submit" class="btn-create">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+        </svg>
+        Create user
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

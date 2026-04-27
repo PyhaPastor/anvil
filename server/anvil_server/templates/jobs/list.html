@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<div class="space-y-5" x-data="jobsLive({{ total_jobs }}, {{ running_count }})" x-init="init()">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-white">Jobs</h1>
+    {% if user.can_create_jobs() %}
+    <a href="/jobs/new" class="btn-create">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      New job
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Filters -->
+  <form method="get" action="/jobs" class="flex flex-wrap gap-3 items-end">
+    <div>
+      <label class="label">Status</label>
+      <select name="status_filter" class="select w-36" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for s in ['pending','queued','running','completed','failed','cancelled','paused'] %}
+        <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="label">Customer</label>
+      <select name="customer_id" class="select w-44" onchange="this.form.submit()">
+        <option value="">All customers</option>
+        {% for c in customers %}
+        <option value="{{ c.id }}" {% if customer_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="card overflow-x-auto">
+    {% if jobs %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+          <th class="pb-3 pr-4">Name</th>
+          <th class="pb-3 pr-4">Customer</th>
+          <th class="pb-3 pr-4">Status</th>
+          <th class="pb-3 pr-4">Progress</th>
+          <th class="pb-3 pr-4">Cracked</th>
+          <th class="pb-3 pr-4">Agent</th>
+          <th class="pb-3 pr-4">Created</th>
+          <th class="pb-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-zinc-800">
+        {% for job in jobs %}
+        <tr class="hover:bg-zinc-800/40 transition-colors">
+          <td class="py-3 pr-4">
+            <a href="/jobs/{{ job.id }}" class="font-medium text-zinc-100 hover:text-indigo-400">{{ job.name }}</a>
+          </td>
+          <td class="py-3 pr-4 text-zinc-400 text-xs">
+            {% if job.customer %}{{ job.customer.name }}{% else %}<span class="text-zinc-600">—</span>{% endif %}
+          </td>
+          <td class="py-3 pr-4">
+            <span class="badge-{{ job.status.value }}">{{ job.status.value }}</span>
+            {% if job.phase %}<p class="text-[10px] text-zinc-500 mt-0.5" data-phase="{{ job.id }}">{% if job.phase == 'downloading' %}Fetching files…{% elif job.phase == 'cracking' %}Cracking…{% else %}{{ job.phase }}{% endif %}</p>{% else %}<p class="text-[10px] text-zinc-500 mt-0.5 hidden" data-phase="{{ job.id }}"></p>{% endif %}
+          </td>
+          <td class="py-3 pr-4">
+            <div class="flex items-center gap-2">
+              <div class="w-20 bg-zinc-700 rounded-full h-1.5">
+                <div class="bg-indigo-500 h-1.5 rounded-full"
+                     data-progress="{{ job.id }}"
+                     style="width:{{ job.progress_pct|round(0)|int }}%"></div>
+              </div>
+              <span class="text-xs text-zinc-500" data-pct="{{ job.id }}">{{ job.progress_pct|round(0)|int }}%</span>
+            </div>
+          </td>
+          <td class="py-3 pr-4 text-xs text-zinc-400">
+            {% if job.total_hashes %}
+            <span data-cracked="{{ job.id }}">{{ job.cracked_count }}</span>/{{ job.total_hashes }}
+            <span class="text-zinc-600">({{ job.crack_rate_pct }}%)</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="py-3 pr-4 text-xs text-zinc-500">
+            {{ job.agent.name if job.agent else '—' }}
+          </td>
+          <td class="py-3 text-xs text-zinc-500">
+            {{ job.created_at.strftime('%Y-%m-%d %H:%M') }}
+          </td>
+          <td class="py-3">
+            <div class="flex items-center gap-2">
+              {% if user.can_create_jobs() and job.status.value in ['running','queued'] %}
+              <form method="post" action="/jobs/{{ job.id }}/cancel"
+                    onsubmit="return confirm('Cancel job {{ job.name }}?')">
+                <button type="submit" class="btn-warn text-xs">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                  Cancel
+                </button>
+              </form>
+              {% endif %}
+              {% if user.can_create_jobs() and job.status.value in ['failed','cancelled'] %}
+              <form method="post" action="/jobs/{{ job.id }}/rerun">
+                <button type="submit" class="btn-create text-xs px-2 py-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                  </svg>
+                  Re-run
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-sm text-zinc-500 py-4 text-center">No jobs match your filters.</p>
+    {% endif %}
+  </div>
+</div>
+<script>
+function fmtSpeed(hs) {
+  if (!hs) return '';
+  if (hs >= 1e9) return (hs / 1e9).toFixed(2) + ' GH/s';
+  if (hs >= 1e6) return (hs / 1e6).toFixed(2) + ' MH/s';
+  if (hs >= 1e3) return (hs / 1e3).toFixed(1) + ' kH/s';
+  return Math.round(hs) + ' H/s';
+}
+function fmtPhase(phase) {
+  if (!phase) return '';
+  if (phase === 'downloading') return 'Fetching files\u2026';
+  if (phase === 'cracking') return 'Cracking\u2026';
+  return phase;
+}
+
+function jobsLive(initialCount, initialRunning) {
+  return {
+    _totalJobs: initialCount,
+    _prevRunning: initialRunning,
+    _statusSnapshot: {},
+
+    init() {
+      setInterval(() => this.poll(), 5000);
+    },
+
+    async poll() {
+      try {
+        const r = await fetch('/jobs/live');
+        if (!r.ok) return;
+        const d = await r.json();
+
+        // Reload if a new job was created or any job changed running state
+        if (d.total_jobs !== this._totalJobs || d.running_count !== this._prevRunning) {
+          location.reload(); return;
+        }
+        this._prevRunning = d.running_count;
+
+        d.jobs.forEach(j => {
+          // Reload if status changed (e.g. running → completed)
+          if (this._statusSnapshot[j.id] && this._statusSnapshot[j.id] !== j.status) {
+            location.reload(); return;
+          }
+          this._statusSnapshot[j.id] = j.status;
+
+          const pBar    = document.querySelector(`[data-progress="${j.id}"]`);
+          const pPct    = document.querySelector(`[data-pct="${j.id}"]`);
+          const crackedEl = document.querySelector(`[data-cracked="${j.id}"]`);
+          const phaseEl = document.querySelector(`[data-phase="${j.id}"]`);
+          if (pBar) pBar.style.width = j.progress_pct + '%';
+          if (pPct) pPct.textContent = Math.round(j.progress_pct) + '%';
+          if (crackedEl) crackedEl.textContent = j.cracked_count;
+          if (phaseEl) { phaseEl.textContent = fmtPhase(j.phase); phaseEl.classList.toggle('hidden', !j.phase); }
+        });
+      } catch (_) {}
+    }
+  }
+}
+</script>
+{% endblock %}

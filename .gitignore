@@ -1,0 +1,43 @@
+﻿# Sensitive config — keep locally, never commit
+server/config.toml
+agent/config.toml
+
+# Database
+server/anvil.db
+server/anvil.db-shm
+server/anvil.db-wal
+
+# TLS certificates and keys
+server/certs/
+
+# Runtime data
+server/data/wordlists/
+server/data/hashlists/
+server/data/exports/
+server/logs/
+agent/logs/
+
+# Personal notes
+to do.txt
+
+# IDE / editor
+.claude/settings.local.json
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+*.egg
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

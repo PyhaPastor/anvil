@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}New Job{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-5" x-data="newJob()">
+  <div class="flex items-center gap-3">
+    <a href="/jobs" class="text-zinc-500 hover:text-zinc-300 text-sm">← Jobs</a>
+    <h1 class="text-xl font-bold text-white">New cracking job</h1>
+  </div>
+
+  <!-- Template picker -->
+  {% if job_templates %}
+  <div class="card">
+    <label class="label">Start from a template <span class="text-zinc-600">(optional)</span></label>
+    <select class="select" onchange="if(this.value) window.location='/jobs/new?template_id='+this.value">
+      <option value="">— Choose a template —</option>
+      {% for t in job_templates %}
+      <option value="{{ t.id }}" {% if prefill and prefill.id == t.id %}selected{% endif %}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/jobs/new" enctype="multipart/form-data" class="space-y-5">
+    <!-- Basic info -->
+    <div class="card space-y-4">
+      <h2 class="text-sm font-semibold text-zinc-300">Job details</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Job name *</label>
+          <input name="name" type="text" required class="input" placeholder="e.g. ACME Corp AD dump"
+                 value="{{ prefill.name if prefill else '' }}"/>
+        </div>
+        <div>
+          <label class="label">Customer</label>
+          <select name="customer_id" class="select">
+            <option value="">— None —</option>
+            {% for c in customers %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="label">Agent *</label>
+          <select name="agent_id" class="select" required>
+            <option value="">— Select agent —</option>
+            {% for a in agents %}
+            <option value="{{ a.id }}"
+              {% if a.id == default_agent_id %}selected{% endif %}>
+              {{ a.name }}{% if not a.is_online %} (offline){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          {% if online_agents|length == 1 %}
+          <p class="text-xs text-emerald-500 mt-1">Only one agent online — pre-selected.</p>
+          {% elif online_agents|length >= 2 and default_agent_id %}
+          <p class="text-xs text-zinc-500 mt-1">First registered agent pre-selected — change if needed.</p>
+          {% elif online_agents|length == 0 %}
+          <p class="text-xs text-amber-500 mt-1">No agents are currently online.</p>
+          {% endif %}
+        </div>
+        <div>
+          <label class="label">Priority <span class="text-zinc-600">(1 = high, 10 = low)</span></label>
+          <input name="priority" type="number" min="1" max="10" value="{{ prefill.priority if prefill else 5 }}" class="input"/>
+        </div>
+      </div>
+      <div>
+        <label class="label">Notes</label>
+        <textarea name="notes" rows="2" class="input" placeholder="Optional notes visible to your team"></textarea>
+      </div>
+    </div>
+
+    <!-- Hash list -->
+    <div class="card space-y-4" x-data="hashFileList()">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-zinc-300">Hash list</h2>
+        {% if existing_hashlists %}
+        <div class="flex items-center gap-1 text-xs">
+          <button type="button" @click="hashSource='upload'"
+                  :class="hashSource==='upload' ? 'btn-create' : 'btn-secondary'" class="text-xs px-2.5 py-1">Upload new</button>
+          <button type="button" @click="hashSource='existing'"
+                  :class="hashSource==='existing' ? 'btn-create' : 'btn-secondary'" class="text-xs px-2.5 py-1">Use existing</button>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Upload section -->
+      <div x-show="hashSource === 'upload'" class="space-y-2">
+        <label class="label">Hash file(s) <span class="text-zinc-600">(.txt, .hash, .lst, .hashes)</span></label>
+        <input name="hash_files" type="file" multiple
+               :required="hashSource === 'upload'"
+               accept=".txt,.hash,.hashes,.lst,.pot"
+               class="block w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-zinc-700 file:text-zinc-200 hover:file:bg-zinc-600 cursor-pointer"/>
+        <p class="text-xs text-zinc-500">Hold Ctrl/⌘ to select multiple files at once.</p>
+      </div>
+
+      <!-- Existing hash list section -->
+      {% if existing_hashlists %}
+      <div x-show="hashSource === 'existing'" class="space-y-2">
+        <label class="label">Select hash list from a previous job</label>
+        <select name="existing_hashlist_ids_select" id="existing-hashlist-select" class="select w-full h-40" multiple
+                @change="updateExistingIds()">
+          {% for hl in existing_hashlists %}
+          <option value="{{ hl.id }}">{{ hl.job_name }} — {{ hl.name }} ({{ hl.total_hashes }} hashes{% if hl.cracked_count %}, {{ hl.cracked_count }} cracked{% endif %})</option>
+          {% endfor %}
+        </select>
+        <p class="text-xs text-zinc-500">Hold Ctrl/⌘ to select multiple. The file on disk is reused — hashes will be re-parsed fresh for this job.</p>
+        <input type="hidden" name="existing_hashlist_ids" id="existing-hashlist-ids" value="[]"/>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Hash type -->
+    <div class="card space-y-4">
+      <h2 class="text-sm font-semibold text-zinc-300">Hash type</h2>
+      <div class="flex gap-3 mb-3">
+        <button type="button" @click="autoDetect=true" :class="autoDetect ? 'btn-create' : 'btn-secondary'" class="text-xs">Auto-detect</button>
+        <button type="button" @click="autoDetect=false" :class="!autoDetect ? 'btn-create' : 'btn-secondary'" class="text-xs">Manual select</button>
+      </div>
+
+      <template x-if="autoDetect">
+        <div class="text-sm text-zinc-400 bg-zinc-800 rounded-lg px-4 py-3">
+          Hash type will be detected automatically by hashcat. You can still override it below if needed.
+          <input type="hidden" name="hash_type" :value="manualHashType || ''"/>
+        </div>
+      </template>
+
+      <template x-if="!autoDetect">
+        <div class="space-y-3">
+          <div>
+            <label class="label">Favourites</label>
+            <div class="flex flex-wrap gap-2">
+              {% for mode_id, cat, name in favourite_modes %}
+              <button type="button" @click="setHashType({{ mode_id }})"
+                      :class="manualHashType == {{ mode_id }} ? 'btn-create' : 'btn-secondary'"
+                      class="text-xs px-2.5 py-1">
+                {{ mode_id }} – {{ name }}
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+          <div>
+            <label class="label">All hash types</label>
+            <input type="text" placeholder="Search…" x-model="hashSearch" class="input mb-2"/>
+            <select name="hash_type" class="select h-36" x-model="manualHashType"
+                    :size="6">
+              <option value="">— Auto-detect —</option>
+              {% set ns = namespace(cat='') %}
+              {% for mode_id, cat, name in hashcat_modes %}
+              {% if cat != ns.cat %}
+              {% set ns.cat = cat %}
+              <option disabled class="text-zinc-600 bg-zinc-900">── {{ cat }} ──</option>
+              {% endif %}
+              <option value="{{ mode_id }}"
+                      x-show="!hashSearch || '{{ mode_id }} {{ name }}'.toLowerCase().includes(hashSearch.toLowerCase())"
+                      {% if prefill and prefill.hash_type == mode_id %}selected{% endif %}>
+                {{ mode_id }} – {{ name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <p class="text-xs text-zinc-500">Selected: <span class="text-zinc-200" x-text="manualHashType || 'None (auto-detect)'"></span></p>
+        </div>
+      </template>
+    </div>
+
+    <!-- Attack config -->
+    <div class="card space-y-4">
+      <h2 class="text-sm font-semibold text-zinc-300">Attack configuration</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Attack mode</label>
+          <select name="attack_mode" class="select" x-model="attackMode">
+            {% for am in attack_modes %}
+            <option value="{{ am.value }}" {% if prefill and prefill.attack_mode == am.value %}selected{% endif %}>
+              {{ am.value }} – {{ am.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div x-show="[0,1,6,7].includes(parseInt(attackMode))" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="label mb-0">Wordlist</label>
+            <label class="flex items-center gap-1.5 cursor-pointer select-none text-xs text-zinc-400 hover:text-zinc-200">
+              <input type="checkbox" x-model="batchMode" class="rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500"/>
+              <span>Batch — multiple wordlists</span>
+            </label>
+          </div>
+
+          <!-- Single wordlist -->
+          <template x-if="!batchMode">
+            <select name="wordlist_id" class="select">
+              <option value="">— None —</option>
+              {% for wl in wordlists %}
+              <option value="{{ wl.id }}" {% if prefill and prefill.wordlist_id == wl.id %}selected{% endif %}>
+                {{ wl.name }} ({{ "{:,}".format(wl.line_count) }} words)
+              </option>
+              {% endfor %}
+            </select>
+          </template>
+
+          <!-- Batch multi-select -->
+          <template x-if="batchMode">
+            <div class="space-y-1">
+              <select id="batch-wordlist-select" class="select h-40" multiple
+                      @change="updateBatchIds()">
+                {% for wl in wordlists %}
+                <option value="{{ wl.id }}">{{ wl.name }} ({{ "{:,}".format(wl.line_count) }} words)</option>
+                {% endfor %}
+              </select>
+              <p class="text-xs text-zinc-500">Hold Ctrl/⌘ to select multiple. One job will be queued per wordlist.</p>
+              <input type="hidden" name="batch_wordlist_ids" id="batch-wordlist-ids" value="[]"/>
+            </div>
+          </template>
+        </div>
+        <div x-show="[3,6,7].includes(parseInt(attackMode))">
+          <label class="label">Mask</label>
+          <input name="mask" type="text" class="input" placeholder="e.g. ?u?l?l?l?d?d"
+                 value="{{ (prefill.mask or '') if prefill else '' }}"/>
+        </div>
+      </div>
+
+      <!-- Rule files -->
+      <div x-show="parseInt(attackMode) === 0">
+        <label class="label">Rules <span class="text-zinc-600">(hold Ctrl to select multiple)</span></label>
+        <select name="rules_json_multi" id="rules-select" class="select h-28" multiple>
+          {% for r in rules %}
+          <option value="{{ r.id }}">{{ r.name }}</option>
+          {% endfor %}
+        </select>
+        <input type="hidden" name="rule_ids" id="rule_ids_hidden" value="[]"/>
+      </div>
+
+      <div>
+        <label class="label">Extra hashcat flags <span class="text-zinc-600">(optional, advanced)</span></label>
+        <input name="extra_flags" type="text" class="input font-mono text-xs"
+               placeholder="e.g. --increment --increment-min=6"
+               value="{{ (prefill.extra_flags or '') if prefill else '' }}"/>
+        <p class="text-xs text-zinc-600 mt-1">Output redirection, potfile, and session flags are blocked for security.</p>
+      </div>
+    </div>
+
+    <button type="submit" class="inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-lg text-base font-semibold transition-all bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/50 shadow-lg shadow-indigo-900/30">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+      Launch job
+    </button>
+  </form>
+</div>
+
+<script>
+function newJob() {
+  return {
+    autoDetect: {{ 'false' if prefill and prefill.hash_type else 'true' }},
+    manualHashType: '{{ prefill.hash_type if prefill and prefill.hash_type else "" }}',
+    attackMode: '{{ prefill.attack_mode if prefill else 0 }}',
+    hashSearch: '',
+    batchMode: false,
+    setHashType(id) { this.manualHashType = id; },
+    updateBatchIds() {
+      const sel = document.getElementById('batch-wordlist-select');
+      const hidden = document.getElementById('batch-wordlist-ids');
+      if (sel && hidden) {
+        hidden.value = JSON.stringify([...sel.selectedOptions].map(o => parseInt(o.value)));
+      }
+    },
+  }
+}
+
+function hashFileList() {
+  return {
+    hashSource: 'upload',
+    updateExistingIds() {
+      const sel = document.getElementById('existing-hashlist-select');
+      const hidden = document.getElementById('existing-hashlist-ids');
+      if (sel && hidden) {
+        hidden.value = JSON.stringify([...sel.selectedOptions].map(o => parseInt(o.value)));
+      }
+    }
+  }
+}
+
+// Serialise multi-select rules to hidden JSON field
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('rules-select');
+  const hidden = document.getElementById('rule_ids_hidden');
+  if (sel) {
+    sel.addEventListener('change', () => {
+      hidden.value = JSON.stringify([...sel.selectedOptions].map(o => parseInt(o.value)));
+    });
+  }
+});
+</script>
+{% endblock %}

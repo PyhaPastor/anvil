@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-5">
+  <h1 class="text-xl font-bold text-body">Server Settings</h1>
+
+  {% if msg == 'prov_rotated' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="text-sm text-emerald-300">Provisioning key rotated. New installs will use the new key immediately.</p>
+  </div>
+  {% elif msg == 'cert_regenerated' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <div class="text-sm">
+      <p class="text-emerald-300 font-medium">TLS certificate regenerated.</p>
+      <p class="text-dim mt-0.5">Restart the server service, then re-run the agent install command to pick up the new cert:
+        <code class="font-mono text-xs text-body bg-zinc-800/60 px-1.5 py-0.5 rounded">sudo systemctl restart anvil-server</code>
+      </p>
+    </div>
+  </div>
+  {% elif msg == 'allowlist_saved' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="text-sm text-emerald-300">Install allowlist saved. Takes effect immediately.</p>
+  </div>
+  {% elif msg == 'kiosk_saved' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="text-sm text-emerald-300">Kiosk allowlist saved. Takes effect immediately.</p>
+  </div>
+  {% elif msg == 'default_agent_saved' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="text-sm text-emerald-300">Default agent saved. Takes effect immediately.</p>
+  </div>
+  {% elif msg == 'kiosk_bad' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-red-500/10 border border-red-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <p class="text-sm text-red-300">Invalid entries (not valid IPs or CIDRs): <code class="font-mono">{{ request.query_params.get('bad', '') }}</code></p>
+  </div>
+  {% elif msg == 'allowlist_bad' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-red-500/10 border border-red-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <p class="text-sm text-red-300">Invalid entries (not valid IPs or CIDRs): <code class="font-mono">{{ request.query_params.get('bad', '') }}</code></p>
+  </div>
+  {% elif msg == 'cert_error' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-red-500/10 border border-red-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <div class="text-sm">
+      <p class="text-red-300 font-medium">Certificate regeneration failed.</p>
+      <p class="text-dim mt-0.5">Check server logs: <code class="font-mono text-xs text-body">sudo journalctl -u anvil-server -n 20</code></p>
+    </div>
+  </div>
+  {% elif msg == 'not_self_signed' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <p class="text-sm text-amber-300">TLS mode is set to "provided" — manage your certificate externally.</p>
+  </div>
+  {% endif %}
+
+  <!-- TLS Certificate -->
+  <div class="card space-y-4">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-semibold text-body">TLS Certificate</p>
+        <p class="text-sm text-dim mt-0.5">The self-signed cert must include your server's hostname in its Subject Alternative Names so agents can verify it.</p>
+      </div>
+    </div>
+
+    {% if cert_sans %}
+    <div>
+      <p class="text-xs font-semibold text-dimmer uppercase tracking-wider mb-2">Current cert covers</p>
+      <div class="flex flex-wrap gap-1.5">
+        {% for san in cert_sans %}
+        <span class="font-mono text-xs px-2 py-0.5 rounded surface border border-theme text-dim">{{ san }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if tls_mode == 'self_signed' %}
+    <form method="post" action="/settings/regenerate-tls-cert"
+          onsubmit="return confirm('Regenerate the TLS certificate?\n\nThe server must be restarted afterwards, and agents must re-run the install command to pick up the new cert.')">
+      <div class="space-y-3">
+        <div>
+          <label class="label text-sm">Extra hostnames / IPs to include in cert SAN</label>
+          <textarea name="extra_sans" rows="3" class="input w-full font-mono text-sm mt-1"
+                    placeholder="anvil.example.com&#10;192.168.1.100">{{ extra_sans | join('\n') }}</textarea>
+          <p class="text-xs text-dimmer mt-1">One per line. Local hostname and 127.0.0.1 are always included automatically.</p>
+        </div>
+        <div class="flex items-center justify-between pt-1 border-t border-theme">
+          <p class="text-xs text-dimmer">Requires server restart to take effect.</p>
+          <button type="submit" class="btn-save">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Regenerate certificate
+          </button>
+        </div>
+      </div>
+    </form>
+    {% else %}
+    <p class="text-sm text-dimmer">TLS mode is <code class="font-mono text-body">provided</code> — manage your certificate externally.</p>
+    {% endif %}
+  </div>
+
+  <!-- Agent Provisioning Key -->
+  <div class="card space-y-4">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+        </svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-body">Agent Provisioning Key</p>
+        <p class="text-sm text-dim mt-0.5">Embedded in the install script for zero-touch agent registration. Rotating revokes future auto-registrations; existing agents are unaffected.</p>
+      </div>
+    </div>
+
+    <div class="surface border border-theme rounded-lg px-4 py-3 flex items-center gap-3">
+      {% if prov_key_set %}
+      <code class="font-mono text-sm text-body flex-1 select-all">{{ prov_key_masked }}</code>
+      <span class="badge badge-completed flex-shrink-0">Active</span>
+      {% else %}
+      <span class="text-sm text-dimmer flex-1 italic">Not set — install script will not work</span>
+      <span class="badge badge-failed flex-shrink-0">Missing</span>
+      {% endif %}
+    </div>
+
+    {% if not prov_key_set %}
+    <div class="flex items-start gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-sm">
+      <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+      </svg>
+      <p class="text-red-300">Provisioning key is missing. Click <strong>Generate key</strong> below — no restart required.</p>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/settings/regenerate-provisioning-key"
+          onsubmit="return {% if prov_key_set %}confirm('Rotate the provisioning key?\n\nExisting agents keep working. Only future installs are affected.'){% else %}true{% endif %}">
+      <div class="flex items-center justify-between pt-1 border-t border-theme">
+        <p class="text-xs text-dimmer">Takes effect immediately — no restart needed.</p>
+        <button type="submit" class="btn-create">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          {% if prov_key_set %}Rotate key{% else %}Generate key{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Kiosk allowlist -->
+  <div class="card space-y-4">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-semibold text-body">Kiosk Mode Allowlist</p>
+        <p class="text-sm text-dim mt-0.5">IPs or subnets that automatically bypass login and are forced into presentation mode when accessing <code class="font-mono text-xs text-body">/dashboard</code>. Intended for display screens running Chromium in kiosk mode.</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      {% if kiosk_allowlist %}
+      <span class="badge badge-completed">Active</span>
+      <span class="text-xs text-dim">{{ kiosk_allowlist | length }} entr{{ 'y' if kiosk_allowlist | length == 1 else 'ies' }}</span>
+      {% else %}
+      <span class="badge badge-pending">Disabled</span>
+      <span class="text-xs text-dimmer">All visitors must log in</span>
+      {% endif %}
+    </div>
+
+    <form method="post" action="/settings/kiosk-allowlist" class="space-y-3">
+      <div>
+        <label class="label text-sm">Kiosk IPs / CIDRs</label>
+        <textarea name="allowlist" rows="4" class="input w-full font-mono text-sm mt-1"
+                  placeholder="192.168.1.50&#10;10.0.0.0/24">{{ kiosk_allowlist | join('\n') }}</textarea>
+        <p class="text-xs text-dimmer mt-1">One per line. Clear and save to disable kiosk mode. Takes effect immediately.</p>
+      </div>
+      <div class="flex items-center justify-between pt-1 border-t border-theme">
+        <p class="text-xs text-dimmer">No restart required.</p>
+        <button type="submit" class="btn-violet">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          Save kiosk list
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Install allowlist -->
+  <div class="card space-y-4">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-semibold text-body">Install Access Control</p>
+        <p class="text-sm text-dim mt-0.5">Restrict which IPs or subnets can fetch the agent install script and package. Leave empty to allow access from anywhere.</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      {% if install_allowlist %}
+      <span class="badge badge-completed">Restricted</span>
+      <span class="text-xs text-dim">{{ install_allowlist | length }} entr{{ 'y' if install_allowlist | length == 1 else 'ies' }}</span>
+      {% else %}
+      <span class="badge badge-pending">Open</span>
+      <span class="text-xs text-dimmer">Anyone can fetch the install script</span>
+      {% endif %}
+    </div>
+
+    <form method="post" action="/settings/install-allowlist" class="space-y-3">
+      <div>
+        <label class="label text-sm">Allowed IPs / CIDRs</label>
+        <textarea name="allowlist" rows="4" class="input w-full font-mono text-sm mt-1"
+                  placeholder="192.168.0.0/16&#10;10.0.0.0/8&#10;203.0.113.42">{{ install_allowlist | join('\n') }}</textarea>
+        <p class="text-xs text-dimmer mt-1">One per line. Accepts individual IPs and CIDR ranges. Clear and save to open access again.</p>
+      </div>
+      <div class="flex items-center justify-between pt-1 border-t border-theme">
+        <p class="text-xs text-dimmer">Takes effect immediately — no restart needed.</p>
+        <button type="submit" class="btn-warn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          Save allowlist
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Default agent -->
+  {% if agents %}
+  <div class="card space-y-4">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-semibold text-body">Default Agent</p>
+        <p class="text-sm text-dim mt-0.5">Pre-selected agent when creating new jobs and applying templates. The auto-select heuristic (online agent / first registered) is used when set to "None".</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/default-agent" class="space-y-3">
+      <div>
+        <label class="label text-sm">Agent</label>
+        <select name="default_agent_id" class="select w-full mt-1">
+          <option value="0" {% if default_agent_id == 0 %}selected{% endif %}>— None (auto-select) —</option>
+          {% for a in agents %}
+          <option value="{{ a.id }}" {% if default_agent_id == a.id %}selected{% endif %}>
+            {{ a.name }}{% if a.hostname and a.hostname != a.name %} ({{ a.hostname }}){% endif %}{% if not a.is_online %} — offline{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center justify-between pt-1 border-t border-theme">
+        <p class="text-xs text-dimmer">Takes effect immediately — no restart needed.</p>
+        <button type="submit" class="btn-save">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          Save default agent
+        </button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- Install command -->
+  <div class="card space-y-3">
+    <p class="text-xs font-semibold text-dimmer uppercase tracking-wider">Agent install command</p>
+    {% if prov_key_set %}
+    <div class="relative">
+      <pre id="install-cmd" class="font-mono text-sm text-blue-300 surface border border-theme rounded-lg px-4 py-3 pr-24 overflow-x-auto whitespace-pre-wrap break-all">curl -sfk {{ request.base_url | string | replace('http://', 'https://') }}agents/install | sudo bash</pre>
+      <button onclick="copyCmd('install-cmd', this)"
+              class="absolute top-2 right-2 btn-secondary text-xs px-3 py-1.5">Copy</button>
+    </div>
+    {% else %}
+    <p class="text-sm text-dimmer italic">Generate a provisioning key above to enable the install command.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function copyCmd(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent.trim()).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+</script>
+{% endblock %}

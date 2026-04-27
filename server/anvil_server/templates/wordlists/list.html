@@ -1,0 +1,650 @@
+{% extends "base.html" %}
+{% block title %}Wordlists{% endblock %}
+{% block content %}
+<script>const _AGENTS_INFO = {{ agents_info | tojson }};</script>
+<div class="space-y-6" x-data="wordlistsPage(_AGENTS_INFO)">
+  <div class="flex items-center justify-between">
+    <div class="flex items-baseline gap-4">
+      <h1 class="text-2xl font-bold text-white">Wordlists &amp; Rules</h1>
+      {% if disk_free_gb is not none %}
+      <span class="text-xs text-zinc-500">
+        <span class="{% if disk_free_gb < 2 %}text-red-400{% elif disk_free_gb < 10 %}text-yellow-400{% else %}text-zinc-400{% endif %}">
+          {{ "%.1f"|format(disk_free_gb) }} GB free
+        </span>
+        <span class="text-zinc-600">/ {{ "%.0f"|format(disk_total_gb) }} GB</span>
+      </span>
+      {% endif %}
+    </div>
+    <div class="flex gap-2">
+      <button @click="showWlUpload=!showWlUpload; showUrlFetch=false" class="btn-upload">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+        </svg>
+        Upload wordlist
+      </button>
+      <button @click="showUrlFetch=!showUrlFetch; showWlUpload=false; showRuleUpload=false" class="btn-violet">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+        </svg>
+        Fetch from URL
+      </button>
+      <button @click="showRuleUpload=!showRuleUpload; showWlUpload=false" class="btn-upload">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+        </svg>
+        Upload rule file
+      </button>
+    </div>
+  </div>
+
+  <!-- URL fetch panel -->
+  <div x-show="showUrlFetch" x-cloak class="card border-blue-800">
+    <h2 class="text-sm font-semibold text-blue-300 mb-4">Fetch wordlist from URL</h2>
+    <form id="url-form" class="grid grid-cols-1 md:grid-cols-2 gap-4"
+          @submit.prevent="doFetchUrl($el)">
+      <div class="md:col-span-2">
+        <label class="label">URL * <span class="text-zinc-500">(http:// or https://)</span></label>
+        <input name="url" type="url" required class="input font-mono text-sm"
+               placeholder="https://example.com/rockyou.txt"/>
+      </div>
+      <div>
+        <label class="label">Name *</label>
+        <input name="name" type="text" required class="input" placeholder="e.g. rockyou-2024"/>
+      </div>
+      <div>
+        <label class="label">Category</label>
+        <input name="category" type="text" class="input" placeholder="e.g. general, wifi"/>
+      </div>
+      <div class="md:col-span-2">
+        <label class="label">Description</label>
+        <input name="description" type="text" class="input" placeholder="Optional"/>
+      </div>
+      <div class="md:col-span-2 flex items-center justify-between pt-2 border-t border-theme">
+        <button type="button" @click="showUrlFetch=false" class="btn-secondary text-sm">Cancel</button>
+        <button type="submit" :disabled="urlFetch.active"
+                class="btn-violet text-sm flex items-center gap-2"
+                :class="urlFetch.active ? 'opacity-50 cursor-not-allowed' : ''">
+          <template x-if="urlFetch.active">
+            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          </template>
+          <template x-if="!urlFetch.active">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+          </template>
+          <span x-text="urlFetch.active ? 'Downloading…' : 'Fetch wordlist'"></span>
+        </button>
+      </div>
+      <template x-if="urlFetch.error">
+        <div class="md:col-span-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-300" x-text="urlFetch.error"></div>
+      </template>
+    </form>
+  </div>
+
+  <!-- Wordlist upload panel -->
+  <div x-show="showWlUpload" x-cloak class="card border-indigo-800">
+    <h2 class="text-sm font-semibold text-indigo-300 mb-4">Upload wordlist</h2>
+    <form id="wl-form" class="grid grid-cols-1 md:grid-cols-2 gap-4"
+          @submit.prevent="doUpload('wl', $el)">
+      <div>
+        <label class="label">Name *</label>
+        <input name="name" type="text" required class="input" placeholder="e.g. rockyou-2024"/>
+      </div>
+      <div>
+        <label class="label">Category</label>
+        <input name="category" type="text" class="input" placeholder="e.g. general, wifi, english"/>
+      </div>
+      <div class="md:col-span-2">
+        <label class="label">Description</label>
+        <input name="description" type="text" class="input" placeholder="Optional description"/>
+      </div>
+      <div class="md:col-span-2">
+        <label class="label">File * <span class="text-zinc-500">(.txt, .lst, .dict, .wl)</span></label>
+        <input name="file" type="file" required accept=".txt,.lst,.dict,.wl"
+               class="block w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-zinc-700 file:text-zinc-200 hover:file:bg-zinc-600"/>
+      </div>
+      <div class="md:col-span-2 flex items-center justify-between pt-2 border-t border-theme">
+        <button type="button" @click="showWlUpload=false" class="btn-secondary text-sm">Cancel</button>
+        <button type="submit" :disabled="wl.active" class="btn-upload" :class="wl.active ? 'opacity-50 cursor-not-allowed' : ''">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+          Upload wordlist
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Rule upload panel -->
+  <div x-show="showRuleUpload" x-cloak class="card border-zinc-600">
+    <h2 class="text-sm font-semibold text-zinc-300 mb-4">Upload rule file</h2>
+    <form id="rule-form" class="grid grid-cols-1 md:grid-cols-2 gap-4"
+          @submit.prevent="doUpload('rule', $el)">
+      <div>
+        <label class="label">Name *</label>
+        <input name="name" type="text" required class="input" placeholder="e.g. best64"/>
+      </div>
+      <div>
+        <label class="label">Description</label>
+        <input name="description" type="text" class="input"/>
+      </div>
+      <div class="md:col-span-2">
+        <label class="label">File * <span class="text-zinc-500">(.rule, .rules, .txt)</span></label>
+        <input name="file" type="file" required accept=".rule,.rules,.txt"
+               class="block w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-zinc-700 file:text-zinc-200 hover:file:bg-zinc-600"/>
+      </div>
+      <div class="md:col-span-2 flex items-center justify-between pt-2 border-t border-theme">
+        <button type="button" @click="showRuleUpload=false" class="btn-secondary text-sm">Cancel</button>
+        <button type="submit" :disabled="rule.active" class="btn-upload" :class="rule.active ? 'opacity-50 cursor-not-allowed' : ''">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+          Upload rule file
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Upload progress modal -->
+  <template x-if="wl.active || rule.active">
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <div class="card w-96 space-y-5">
+        <!-- Header -->
+        <div class="flex items-center gap-3">
+          <!-- Spinner while active, icon when done -->
+          <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+               :class="{
+                 'bg-indigo-500/15 border border-indigo-500/25': _cur().phase === \'upload\' || _cur().phase === \'process\',
+                 'bg-emerald-500/15 border border-emerald-500/25': _cur().status === \'success\',
+                 'bg-red-500/15 border border-red-500/25': _cur().status === \'error\'
+               }">
+            <template x-if="_cur().phase === 'upload' || _cur().phase === 'process'">
+              <svg class="w-5 h-5 text-indigo-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            </template>
+            <template x-if="_cur().status === 'success'">
+              <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+            </template>
+            <template x-if="_cur().status === 'error'">
+              <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </template>
+          </div>
+          <div>
+            <p class="font-semibold text-body" x-text="_cur().title"></p>
+            <p class="text-xs text-dim mt-0.5" x-text="_cur().subtitle"></p>
+          </div>
+        </div>
+
+        <!-- Progress bar (shown during upload phase) -->
+        <template x-if="_cur().phase === 'upload' || _cur().phase === 'process'">
+          <div class="space-y-2">
+            <div class="w-full bg-zinc-700 rounded-full h-2 overflow-hidden">
+              <div class="h-2 rounded-full transition-all duration-300"
+                   :class="_cur().phase === 'process' ? 'bg-indigo-400 animate-pulse' : 'bg-indigo-500'"
+                   :style="'width:' + _cur().pct + '%'"></div>
+            </div>
+            <div class="flex justify-between text-xs text-dim">
+              <span x-text="_cur().phase === 'process' ? 'Processing file…' : 'Uploading…'"></span>
+              <span x-show="_cur().phase === 'upload'" x-text="_cur().pct + '%'"></span>
+            </div>
+          </div>
+        </template>
+
+        <!-- Success details -->
+        <template x-if="_cur().status === 'success'">
+          <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3 space-y-1 text-sm">
+            <p class="text-emerald-300 font-medium" x-text="_cur().msg"></p>
+            <template x-if="_cur().details">
+              <div class="text-xs text-dim space-y-0.5 mt-2">
+                <p x-show="_cur().details.line_count != null">
+                  <span class="text-dimmer">Lines:</span>
+                  <span class="text-body" x-text="Number(_cur().details.line_count).toLocaleString()"></span>
+                </p>
+                <p>
+                  <span class="text-dimmer">Size:</span>
+                  <span class="text-body" x-text="(_cur().details.size_bytes / 1048576).toFixed(1) + ' MB'"></span>
+                </p>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Error details -->
+        <template x-if="_cur().status === 'error'">
+          <div class="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-300" x-text="_cur().msg"></div>
+        </template>
+
+        <!-- Footer -->
+        <div class="flex justify-end pt-2 border-t border-theme">
+          <template x-if="_cur().status === 'success'">
+            <p class="text-xs text-dimmer self-center">Refreshing page…</p>
+          </template>
+          <template x-if="_cur().status === 'error'">
+            <button @click="resetProgress()" class="btn-secondary text-sm">Close</button>
+          </template>
+          <template x-if="_cur().phase === 'upload' || _cur().phase === 'process'">
+            <p class="text-xs text-dimmer">Please wait…</p>
+          </template>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Wordlists table -->
+  <div class="card">
+    <h2 class="text-sm font-semibold text-zinc-300 mb-4">Wordlists</h2>
+    {% if wordlists %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+          <th class="pb-2 pr-4">Name</th>
+          <th class="pb-2 pr-4">Category</th>
+          <th class="pb-2 pr-4">Words</th>
+          <th class="pb-2 pr-4">Size</th>
+          <th class="pb-2 pr-4">Uploaded</th>
+          <th class="pb-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-zinc-800">
+        {% for wl in wordlists %}
+        <tr class="hover:bg-zinc-800/40">
+          <td class="py-2.5 pr-4 font-medium text-zinc-100">{{ wl.name }}</td>
+          <td class="py-2.5 pr-4 text-zinc-500 text-xs">{{ wl.category or '—' }}</td>
+          <td class="py-2.5 pr-4 text-zinc-400 text-xs">{{ "{:,}".format(wl.line_count) }}</td>
+          <td class="py-2.5 pr-4 text-zinc-500 text-xs">{{ "%.1f"|format(wl.file_size_bytes/1048576) }} MB</td>
+          <td class="py-2.5 pr-4 text-xs text-zinc-500">{{ wl.uploaded_at.strftime('%Y-%m-%d') }}</td>
+          <td class="py-2.5">
+            <div class="flex items-center gap-2">
+              <button type="button"
+                      title="Push to agent"
+                      class="btn-secondary text-xs px-2 py-1.5"
+                      @click="openPushModal(+$el.dataset.wlid, $el.dataset.wlname, +$el.dataset.wlsize, +$el.dataset.wllines)"
+                      data-wlid="{{ wl.id }}"
+                      data-wlname="{{ wl.name | e }}"
+                      data-wlsize="{{ wl.file_size_bytes or 0 }}"
+                      data-wllines="{{ wl.line_count or 0 }}">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+              </button>
+              <form method="post" action="/wordlists/{{ wl.id }}/delete"
+                    onsubmit="return confirm('Delete wordlist {{ wl.name }}?')">
+                <button type="submit" class="btn-destruct text-xs">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-sm text-zinc-500 py-2">No wordlists uploaded yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Push to agent modal -->
+  <div x-show="push.open" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+       @click.self="closePushModal()">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+        <div>
+          <h2 class="text-sm font-semibold text-white">Push wordlist to agent</h2>
+          <p class="text-xs text-zinc-500 mt-0.5 font-mono" x-text="push.name"></p>
+        </div>
+        <button @click="closePushModal()" class="text-zinc-500 hover:text-zinc-200 text-lg leading-none">✕</button>
+      </div>
+
+      <!-- Agent list -->
+      <div class="px-5 py-4 space-y-3 max-h-[420px] overflow-y-auto">
+        <template x-if="agents.length === 0">
+          <p class="text-xs text-zinc-500 text-center py-4">No active agents registered.</p>
+        </template>
+        <template x-for="agent in agents" :key="agent.id">
+          <div class="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-800/40 px-4 py-3">
+            <!-- Online indicator -->
+            <span class="w-2 h-2 rounded-full flex-shrink-0"
+                  :class="agent.is_online ? 'bg-emerald-400' : 'bg-zinc-600'"></span>
+
+            <!-- Name + status -->
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-zinc-200" x-text="agent.name"></p>
+              <p class="text-xs mt-0.5"
+                 :class="agent.is_online ? 'text-emerald-600' : 'text-zinc-600'"
+                 x-text="agent.is_online ? 'Online' : 'Offline'"></p>
+            </div>
+
+            <!-- Right side: cached badge / progress / push button -->
+            <div class="flex-shrink-0 text-right min-w-[140px]">
+
+              <!-- Already cached (from heartbeat inventory) -->
+              <template x-if="isCached(agent) && !push.status[agent.id]">
+                <div class="flex items-center justify-end gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  <span class="text-xs text-emerald-400 font-medium">Cached</span>
+                </div>
+              </template>
+
+              <!-- Push button (online, not cached, not started) -->
+              <template x-if="!isCached(agent) && !push.status[agent.id] && agent.is_online">
+                <button class="btn-create text-xs"
+                        @click="pushToAgent(agent.id, push.wordlistId)">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                  </svg>
+                  Push
+                </button>
+              </template>
+
+              <!-- Offline, not cached -->
+              <template x-if="!isCached(agent) && !push.status[agent.id] && !agent.is_online">
+                <span class="text-xs text-zinc-600">Agent offline</span>
+              </template>
+
+              <!-- Queued / downloading -->
+              <template x-if="push.status[agent.id] && (push.status[agent.id].status === 'queued' || push.status[agent.id].status === 'downloading')">
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-[10px] tabular-nums">
+                    <span class="text-zinc-500"
+                          x-text="push.status[agent.id].status === 'queued' ? 'Queued…' : 'Downloading…'"></span>
+                    <span class="text-blue-400" x-text="(push.status[agent.id].pct || 0).toFixed(1) + '%'"></span>
+                  </div>
+                  <div class="w-full bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                    <div class="h-1.5 rounded-full bg-blue-500 transition-all duration-500"
+                         :style="'width:' + (push.status[agent.id].pct || 0) + '%'"></div>
+                  </div>
+                  <p class="text-[10px] text-zinc-600 tabular-nums text-right"
+                     x-show="push.status[agent.id].bytes_total > 0"
+                     x-text="fmtBytes(push.status[agent.id].bytes_done) + ' / ' + fmtBytes(push.status[agent.id].bytes_total)"></p>
+                </div>
+              </template>
+
+              <!-- Complete -->
+              <template x-if="push.status[agent.id] && (push.status[agent.id].status === 'complete' || push.status[agent.id].status === 'already_cached')">
+                <div class="flex items-center justify-end gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  <span class="text-xs text-emerald-400 font-medium">Ready</span>
+                </div>
+              </template>
+
+              <!-- Error -->
+              <template x-if="push.status[agent.id] && push.status[agent.id].status === 'error'">
+                <div class="text-right">
+                  <p class="text-xs text-red-400">Failed</p>
+                  <p class="text-[10px] text-red-400/70 mt-0.5" x-text="push.status[agent.id].error || ''"></p>
+                  <button class="text-[10px] text-zinc-500 hover:text-zinc-300 mt-0.5 underline"
+                          @click="pushToAgent(agent.id, push.wordlistId)">Retry</button>
+                </div>
+              </template>
+
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-5 py-3 border-t border-zinc-800 flex justify-between items-center">
+        <p class="text-xs text-zinc-600">Agent must be online to receive the push command.</p>
+        <button @click="closePushModal()" class="btn-secondary text-xs">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rules table -->
+  <div class="card">
+    <h2 class="text-sm font-semibold text-zinc-300 mb-4">Rule files</h2>
+    {% if rules %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+          <th class="pb-2 pr-4">Name</th>
+          <th class="pb-2 pr-4">Description</th>
+          <th class="pb-2 pr-4">Uploaded</th>
+          <th class="pb-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-zinc-800">
+        {% for r in rules %}
+        <tr class="hover:bg-zinc-800/40">
+          <td class="py-2.5 pr-4 font-medium text-zinc-100">{{ r.name }}</td>
+          <td class="py-2.5 pr-4 text-zinc-500 text-sm">{{ r.description or '—' }}</td>
+          <td class="py-2.5 pr-4 text-xs text-zinc-500">{{ r.uploaded_at.strftime('%Y-%m-%d') }}</td>
+          <td class="py-2.5 text-xs text-zinc-600">—</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-sm text-zinc-500 py-2">No rule files uploaded yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function wordlistsPage(agentsData) {
+  const _blank = () => ({ active: false, phase: '', status: '', pct: 0, title: '', subtitle: '', msg: '', details: null });
+  return {
+    showWlUpload: false,
+    showRuleUpload: false,
+    showUrlFetch: false,
+    wl: _blank(),
+    rule: _blank(),
+    urlFetch: { active: false, error: '' },
+
+    // Push-to-agent modal
+    agents: agentsData || [],
+    push: {
+      open: false,
+      wordlistId: null,
+      name: '',
+      size: 0,
+      lines: 0,
+      status: {},   // agentId -> {status, pct, bytes_done, bytes_total}
+      _timers: {},  // agentId -> setInterval handle
+    },
+
+    openPushModal(wordlistId, name, size, lines) {
+      this.push.wordlistId = wordlistId;
+      this.push.name = name;
+      this.push.size = size;
+      this.push.lines = lines;
+      this.push.status = {};
+      this.push.open = true;
+    },
+
+    closePushModal() {
+      Object.values(this.push._timers).forEach(t => clearInterval(t));
+      this.push._timers = {};
+      this.push.open = false;
+    },
+
+    isCached(agent) {
+      return (agent.wordlist_cache || []).some(e => e.wordlist_id === this.push.wordlistId);
+    },
+
+    async pushToAgent(agentId, wordlistId) {
+      this.push.status[agentId] = { status: 'queued', pct: 0, bytes_done: 0, bytes_total: this.push.size };
+      try {
+        const r = await fetch(`/wordlists/${wordlistId}/push-to-agent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `agent_id=${agentId}`,
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+          this.push.status[agentId] = { status: 'error', error: d.detail || 'Server error' };
+          return;
+        }
+        if (!d.ws_delivered) {
+          this.push.status[agentId] = { status: 'error', error: 'Agent is offline' };
+          return;
+        }
+        // Command delivered — start polling for progress
+        this._startPollPreload(agentId, wordlistId);
+      } catch {
+        this.push.status[agentId] = { status: 'error', error: 'Network error' };
+      }
+    },
+
+    _startPollPreload(agentId, wordlistId) {
+      if (this.push._timers[agentId]) clearInterval(this.push._timers[agentId]);
+      this.push._timers[agentId] = setInterval(async () => {
+        try {
+          const r = await fetch(`/wordlists/${wordlistId}/preload-status?agent_id=${agentId}`);
+          const d = await r.json();
+          if (d.status && d.status !== 'idle') {
+            this.push.status[agentId] = d;
+          }
+          // Stop polling once terminal state reached
+          if (['complete', 'already_cached', 'error'].includes(d.status)) {
+            clearInterval(this.push._timers[agentId]);
+            delete this.push._timers[agentId];
+          }
+        } catch { /* ignore poll errors */ }
+      }, 1500);
+    },
+
+    fmtBytes(b) {
+      if (!b) return '0 B';
+      if (b >= 1e12) return (b / 1e12).toFixed(1) + ' TB';
+      if (b >= 1e9)  return (b / 1e9).toFixed(1) + ' GB';
+      if (b >= 1e6)  return (b / 1e6).toFixed(1) + ' MB';
+      if (b >= 1e3)  return (b / 1e3).toFixed(0) + ' KB';
+      return b + ' B';
+    },
+
+    _cur() {
+      return this.wl.active ? this.wl : this.rule;
+    },
+
+    resetProgress() {
+      this.wl = _blank();
+      this.rule = _blank();
+    },
+
+    async doFetchUrl(formEl) {
+      if (!formEl.checkValidity()) { formEl.reportValidity(); return; }
+      this.urlFetch.active = true;
+      this.urlFetch.error = '';
+      const data = new FormData(formEl);
+      try {
+        const r = await fetch('/wordlists/fetch-url', {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          body: data,
+        });
+        const resp = await r.json();
+        if (r.ok && resp.ok) {
+          // Reuse the upload modal for success display
+          this.wl = {
+            active: true, phase: 'done', status: 'success', pct: 100,
+            title: 'Download complete', subtitle: '',
+            msg: `"${resp.name}" fetched successfully`,
+            details: { line_count: resp.line_count, size_bytes: resp.size_bytes },
+          };
+          this.showUrlFetch = false;
+          setTimeout(() => window.location.reload(), 2500);
+        } else {
+          this.urlFetch.error = resp.detail || `Server error (${r.status})`;
+          this.urlFetch.active = false;
+        }
+      } catch (err) {
+        this.urlFetch.error = 'Network error — check your connection and try again.';
+        this.urlFetch.active = false;
+      }
+    },
+
+    async doUpload(type, formEl) {
+      const isWl = type === 'wl';
+      const url = isWl ? '/wordlists/upload-wordlist' : '/wordlists/upload-rule';
+      const label = isWl ? 'wordlist' : 'rule file';
+      const state = isWl ? this.wl : this.rule;
+
+      // Validate required fields
+      if (!formEl.checkValidity()) { formEl.reportValidity(); return; }
+
+      Object.assign(state, {
+        active: true, phase: 'upload', status: 'uploading', pct: 0,
+        title: `Uploading ${label}…`,
+        subtitle: formEl.querySelector('[name=name]').value,
+        msg: '', details: null,
+      });
+
+      const data = new FormData(formEl);
+
+      try {
+        const result = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', url);
+          xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              // Upload progress covers 0-95%; last 5% is server-side processing
+              state.pct = Math.round(e.loaded / e.total * 95);
+            }
+          };
+
+          xhr.upload.onload = () => {
+            // File fully sent — now server is processing (line count etc.)
+            state.pct = 95;
+            state.phase = 'process';
+            state.title = `Processing ${label}…`;
+          };
+
+          xhr.onload = () => {
+            try {
+              const resp = JSON.parse(xhr.responseText);
+              if (xhr.status === 200 && resp.ok) {
+                resolve(resp);
+              } else {
+                reject(resp.detail || `Server error (${xhr.status})`);
+              }
+            } catch {
+              reject(`Unexpected server response (${xhr.status})`);
+            }
+          };
+
+          xhr.onerror = () => reject('Network error — check your connection and try again.');
+          xhr.ontimeout = () => reject('Request timed out.');
+          xhr.send(data);
+        });
+
+        // Success
+        state.pct = 100;
+        state.phase = 'done';
+        state.status = 'success';
+        state.title = 'Upload complete';
+        state.subtitle = '';
+        state.msg = `"${result.name}" uploaded successfully`;
+        state.details = result;
+
+        setTimeout(() => window.location.reload(), 2500);
+
+      } catch (err) {
+        state.phase = 'done';
+        state.status = 'error';
+        state.title = 'Upload failed';
+        state.subtitle = '';
+        state.msg = String(err);
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

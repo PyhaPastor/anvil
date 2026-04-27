@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Register Agent{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-5">
+  <div class="flex items-center gap-3">
+    <a href="/agents" class="text-dim hover:text-body text-sm">← Agents</a>
+    <h1 class="text-xl font-bold text-body">Add agent</h1>
+  </div>
+
+  {% if registered %}
+  {# ── Post-registration: custom-name bootstrap flow ──────────────────────── #}
+
+  <div class="card border-t-[3px] border-t-emerald-500 space-y-6">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-semibold text-body">Agent <span class="text-emerald-400">{{ agent_name }}</span> registered.</p>
+        <p class="text-sm text-dim mt-0.5">Run both commands below on the agent machine. Each is a single copy-paste.</p>
+      </div>
+    </div>
+
+    {# Step 1 — Install (skip if already done) #}
+    <div class="space-y-2">
+      <div class="flex items-center gap-2">
+        <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+        <p class="text-xs font-semibold text-dim uppercase tracking-wider">Install the agent <span class="normal-case font-normal text-dimmer">(skip if already installed)</span></p>
+      </div>
+      <div class="relative">
+        <pre id="install-cmd" class="font-mono text-sm text-blue-300 surface border border-theme rounded-lg px-4 py-3 pr-24 overflow-x-auto whitespace-pre-wrap break-all">curl -sfk {{ request.base_url | string | replace('http://', 'https://') }}agents/install | sudo bash</pre>
+        <button onclick="copyCmd('install-cmd', this)"
+                class="absolute top-2 right-2 btn-secondary text-xs px-3 py-1.5">Copy</button>
+      </div>
+    </div>
+
+    {# Step 2 — Bootstrap (configure this specific named agent) #}
+    <div class="space-y-2">
+      <div class="flex items-center gap-2">
+        <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+        <p class="text-xs font-semibold text-dim uppercase tracking-wider">Configure and start this agent</p>
+      </div>
+      <div class="relative">
+        <pre id="bootstrap-cmd" class="font-mono text-sm text-emerald-300 surface border border-theme rounded-lg px-4 py-3 pr-24 overflow-x-auto whitespace-pre-wrap break-all">{{ bootstrap_cmd }}</pre>
+        <button onclick="copyCmd('bootstrap-cmd', this)"
+                class="absolute top-2 right-2 btn-secondary text-xs px-3 py-1.5">Copy</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-xs text-dimmer">This link expires in <strong class="text-amber-400">1 hour</strong>. Re-register the agent if it expires.</p>
+      </div>
+    </div>
+  </div>
+
+  {# Manual fallback — collapsed by default #}
+  <details class="card group">
+    <summary class="cursor-pointer flex items-center justify-between text-sm font-medium text-dim hover:text-body select-none list-none">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Manual configuration (advanced)
+      </div>
+      <svg class="w-4 h-4 text-dimmer transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </summary>
+
+    <div class="mt-4 space-y-4 text-sm">
+      <div class="flex items-start gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+        <svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <p class="text-amber-200/80">Copy this token now — it is shown <strong>only once</strong> and is not stored in plaintext on the server.</p>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-dimmer uppercase tracking-wider block mb-1.5">API Token</label>
+        <div class="flex gap-2">
+          <code id="raw-token" class="flex-1 font-mono text-xs text-emerald-300 surface border border-theme rounded-lg px-3 py-2 break-all select-all">{{ raw_api_token }}</code>
+          <button onclick="copyCmd('raw-token', this)" class="btn-secondary text-xs flex-shrink-0">Copy</button>
+        </div>
+      </div>
+
+      <div class="surface border border-theme rounded-lg p-4 space-y-2 font-mono text-xs text-dim">
+        <p class="font-sans text-xs font-semibold text-body mb-3">Paste into <code>/opt/anvil/agent/config.toml</code></p>
+        <p><span class="text-dimmer">[agent]</span></p>
+        <p>name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = <span class="text-emerald-300">"{{ agent_name }}"</span></p>
+        <p>server_url  = <span class="text-emerald-300">"{{ server_url }}"</span></p>
+        <p>api_token   = <span class="text-emerald-300">"{{ raw_api_token[:16] }}…"</span></p>
+        <p>verify_tls  = <span class="text-blue-300">true</span></p>
+        {% if request.url.scheme == 'https' %}
+        <p>ca_bundle   = <span class="text-emerald-300">"/opt/anvil/agent/certs/anvil.crt"</span></p>
+        <p class="mt-2 text-dimmer font-sans">Copy the server cert: <code class="text-body">scp root@&lt;server&gt;:/opt/anvil/server/certs/anvil.crt /opt/anvil/agent/certs/anvil.crt</code></p>
+        {% endif %}
+      </div>
+    </div>
+  </details>
+
+  <div class="flex gap-3">
+    <a href="/agents/register" class="btn-secondary text-sm">Register another agent</a>
+    <a href="/agents" class="btn-secondary text-sm">← Back to agents</a>
+  </div>
+
+  {% else %}
+  {# ── Pre-registration: zero-touch primary, custom-name secondary ──────────── #}
+
+  {# Primary — zero-touch install #}
+  <div class="card border-t-[3px] border-t-indigo-500 space-y-4">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="font-semibold text-body">Zero-touch install</p>
+        <p class="text-sm text-dim mt-0.5">Run this single command on the agent machine — it installs, self-registers, and starts the service automatically. No dashboard interaction needed.</p>
+      </div>
+    </div>
+
+    <div class="relative">
+      <pre id="install-cmd" class="font-mono text-sm text-blue-300 surface border border-theme rounded-lg px-4 py-3 pr-24 overflow-x-auto whitespace-pre-wrap break-all">curl -sfk {{ request.base_url | string | replace('http://', 'https://') }}agents/install | sudo bash</pre>
+      <button onclick="copyCmd('install-cmd', this)"
+              class="absolute top-2 right-2 btn-upload text-xs px-3 py-1.5">Copy</button>
+    </div>
+
+    <ul class="text-xs text-dim space-y-1.5 pl-1">
+      <li class="flex items-center gap-2">
+        <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        Downloads and installs the agent package from this server
+      </li>
+      <li class="flex items-center gap-2">
+        <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        Registers the agent automatically — named after the machine hostname
+      </li>
+      <li class="flex items-center gap-2">
+        <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        Writes config, downloads the TLS cert, and starts the service
+      </li>
+    </ul>
+  </div>
+
+  {# Divider #}
+  <div class="flex items-center gap-3">
+    <div class="flex-1 border-t border-theme"></div>
+    <span class="text-xs text-dimmer uppercase tracking-wider">or</span>
+    <div class="flex-1 border-t border-theme"></div>
+  </div>
+
+  {# Secondary — custom name via dashboard #}
+  <details class="card group">
+    <summary class="cursor-pointer flex items-center justify-between select-none list-none">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-zinc-500/10 border border-theme flex items-center justify-center flex-shrink-0">
+          <svg class="w-4 h-4 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+          </svg>
+        </div>
+        <div>
+          <p class="text-sm font-semibold text-body">Register with a custom name</p>
+          <p class="text-xs text-dim mt-0.5">Choose a specific name instead of using the hostname</p>
+        </div>
+      </div>
+      <svg class="w-4 h-4 text-dimmer transition-transform group-open:rotate-180 flex-shrink-0 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </summary>
+
+    <div class="mt-5 space-y-4">
+      <p class="text-sm text-dim">You'll get a bootstrap command to run after registration. The agent machine must also have the agent installed (step 1 of the commands shown after registration).</p>
+      <form method="post" action="/agents/register" class="space-y-4">
+        <div>
+          <label class="label">Agent name</label>
+          <input name="name" type="text" required class="input" placeholder="e.g. GPU-Rig-01" autocomplete="off"/>
+          <p class="text-xs text-dimmer mt-1.5">A human-readable label shown in the dashboard and agent logs.</p>
+        </div>
+        <div class="flex gap-3">
+          <button type="submit" class="btn-create">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            Register &amp; get bootstrap command
+          </button>
+          <a href="/agents" class="btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </details>
+
+  {% endif %}
+</div>
+
+<script>
+function copyCmd(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent.trim()).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+# corporate.rule — patterns commonly seen in corporate AD environments
+# "Company + season/year" patterns, keyboard walks, policy-compliant mutations
+# Capitalise + year (most common AD pattern)
+c$2$0$2$3
+c$2$0$2$4
+c$2$0$2$5
+c$2$0$2$3$!
+c$2$0$2$4$!
+c$2$0$2$5$!
+c$1$2$3
+c$1$2$3$!
+c$1$2$3$4
+c$1$2$3$4$!
+# Append season variants (combine with wordlist containing company/org names)
+$S$p$r$i$n$g
+$S$u$m$m$e$r
+$A$u$t$u$m$n
+$F$a$l$l
+$W$i$n$t$e$r
+c$S$p$r$i$n$g
+c$S$u$m$m$e$r
+c$A$u$t$u$m$n
+c$W$i$n$t$e$r
+# Season + year
+$S$p$r$i$n$g$2$0$2$4
+$S$u$m$m$e$r$2$0$2$4
+$W$i$n$t$e$r$2$0$2$4
+$S$p$r$i$n$g$2$0$2$5
+$S$u$m$m$e$r$2$0$2$5
+$W$i$n$t$e$r$2$0$2$5
+# Append ! to existing word then capitalise
+c$!
+u$!
+$!
+$!$!
+# Prepend/append common corporate padding
+^!
+^@
+$1$2$3$!
+$A$B$C
+# Password policy bypass: append @ or # (common when ! is blocked)
+$@
+$#
+c$@
+c$#
+c$@$1
+c$#$1
+# Duplicate word (password + password)
+d
+dc
+dl
+# Reverse + capitalise
+rc
+rl

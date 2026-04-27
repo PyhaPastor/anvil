@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="referrer" content="strict-origin-when-cross-origin"/>
+  <title>{% block title %}Anvil{% endblock %} — Anvil</title>
+  <script>
+    // Runs before any paint — prevents FOUC on theme restore
+    (function(){ if(localStorage.getItem('theme')==='light') document.documentElement.classList.add('light'); })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+  <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+  {% block head_extra %}{% endblock %}
+  <style>
+    :root {
+      --bg-primary: #09090b;
+      --bg-secondary: #27272a;
+      --bg-sidebar: #0f0f11;
+      --text-primary: #f4f4f5;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --border: #27272a;
+      --nav-hover: rgba(63,63,70,0.5);
+      --nav-active: rgba(99,102,241,0.12);
+      --nav-active-border: #818cf8;
+      --card-bg: #18181b;
+      --input-bg: #27272a;
+      --input-border: #3f3f46;
+      --input-text: #f4f4f5;
+      --input-placeholder: #71717a;
+    }
+
+    html.light {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f4f4f4;
+      --bg-sidebar: #f8f9fa;
+      --text-primary: #09090b;
+      --text-secondary: #52525b;
+      --text-muted: #71717a;
+      --border: #e4e4e7;
+      --nav-hover: rgba(228,228,231,0.5);
+      --nav-active: rgba(99,102,241,0.12);
+      --nav-active-border: #818cf8;
+      --card-bg: #ffffff;
+      --input-bg: #ffffff;
+      --input-border: #d4d4d8;
+      --input-text: #09090b;
+      --input-placeholder: #a1a1aa;
+    }
+
+    [x-cloak]{display:none!important}
+    .anvil-sidebar{background:var(--bg-sidebar)}
+    .nav-link{
+      display:flex;align-items:center;gap:0.75rem;
+      padding:0.5rem 0.75rem;
+      border-radius:0.5rem;
+      color:var(--text-secondary);
+      font-size:0.875rem;font-weight:500;
+      transition:color 150ms,background 150ms;
+      border-left:3px solid transparent;
+      text-decoration:none;
+    }
+    .nav-link:hover{color:var(--text-primary);background:var(--nav-hover)}
+    .nav-link.active{color:#c7d2fe;background:var(--nav-active);border-left-color:var(--nav-active-border)}
+    .btn-primary{@apply inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors}
+    .btn-secondary{@apply inline-flex items-center gap-2 px-4 py-2} .btn-secondary{background:var(--bg-secondary); color:var(--text-primary); border:1px solid var(--border); border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:background 150ms}
+    .btn-secondary:hover{background:var(--nav-hover)}
+    .btn-danger{@apply inline-flex items-center gap-2 px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors}
+    /* Tinted action buttons — visible background, semantic color, no harsh solid fills */
+    .btn-save    { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(16,185,129,0.22); color:#6ee7b7; border:1px solid rgba(16,185,129,0.4); }
+    .btn-save:hover    { background:rgba(16,185,129,0.32); color:#a7f3d0; border-color:rgba(16,185,129,0.6); }
+    .btn-create  { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(99,102,241,0.22); color:#a5b4fc; border:1px solid rgba(99,102,241,0.4); }
+    .btn-create:hover  { background:rgba(99,102,241,0.32); color:#c7d2fe; border-color:rgba(99,102,241,0.6); }
+    .btn-upload  { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(99,102,241,0.22); color:#a5b4fc; border:1px solid rgba(99,102,241,0.4); }
+    .btn-upload:hover  { background:rgba(99,102,241,0.32); color:#c7d2fe; border-color:rgba(99,102,241,0.6); }
+    .btn-destruct{ display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(239,68,68,0.18); color:#fca5a5; border:1px solid rgba(239,68,68,0.35); }
+    .btn-destruct:hover{ background:rgba(239,68,68,0.28); color:#fecaca; border-color:rgba(239,68,68,0.55); }
+    .btn-neutral { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(113,113,122,0.18); color:#d4d4d8; border:1px solid rgba(113,113,122,0.35); }
+    .btn-neutral:hover { background:rgba(113,113,122,0.28); color:#e4e4e7; border-color:rgba(113,113,122,0.55); }
+    .btn-warn    { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(245,158,11,0.18); color:#fcd34d; border:1px solid rgba(245,158,11,0.35); }
+    .btn-warn:hover    { background:rgba(245,158,11,0.28); color:#fde68a; border-color:rgba(245,158,11,0.55); }
+    .btn-enable  { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(16,185,129,0.18); color:#6ee7b7; border:1px solid rgba(16,185,129,0.35); }
+    .btn-enable:hover  { background:rgba(16,185,129,0.28); color:#a7f3d0; border-color:rgba(16,185,129,0.55); }
+    .btn-violet  { display:inline-flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.875rem; font-weight:500; transition:all 150ms; background:rgba(139,92,246,0.22); color:#c4b5fd; border:1px solid rgba(139,92,246,0.4); }
+    .btn-violet:hover  { background:rgba(139,92,246,0.32); color:#ddd6fe; border-color:rgba(139,92,246,0.6); }
+    .card{background:var(--card-bg); border:1px solid var(--border); border-radius:0.75rem; padding:1.25rem}
+    .badge{@apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium}
+    .badge-running  {@apply badge; background:rgba(255,255,255,0.10); color:#f1f5f9; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.20)}
+    .badge-completed{@apply badge bg-emerald-500/20 text-emerald-300 ring-1 ring-inset ring-emerald-500/30}
+    .badge-failed   {@apply badge bg-red-500/20 text-red-300 ring-1 ring-inset ring-red-500/30}
+    .badge-pending  { display:inline-flex; align-items:center; padding:0.125rem 0.5rem; border-radius:0.25rem; font-size:0.75rem; font-weight:500; background:rgba(113,113,122,0.20); color:#a1a1aa; box-shadow:inset 0 0 0 1px rgba(113,113,122,0.35); }
+    html.light .badge-pending { background:rgba(82,82,91,0.12); color:#52525b; box-shadow:inset 0 0 0 1px rgba(82,82,91,0.3); }
+    .badge-queued   {@apply badge bg-amber-500/20 text-amber-300 ring-1 ring-inset ring-amber-500/30}
+    .badge-cancelled{@apply badge bg-yellow-500/20 text-yellow-300 ring-1 ring-inset ring-yellow-500/30}
+    .badge-paused   {@apply badge bg-cyan-500/20 text-cyan-300 ring-1 ring-inset ring-cyan-500/30}
+    html.light .badge-running { background:rgba(0,0,0,0.06); color:#334155; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.15); }
+    .input{background:var(--input-bg); border:1px solid var(--input-border); color:var(--input-text); border-radius:0.5rem; padding:0.5rem 0.75rem; font-size:0.875rem}
+    .input:focus{outline:none; ring:2px solid #6366f1; border-color:transparent}
+    .input::placeholder{color:var(--input-placeholder)}
+    .label{color:var(--text-secondary); font-size:0.875rem; font-weight:500; margin-bottom:0.25rem}
+    .select{@apply input}
+    /* Force <option> elements to use themed background — browser defaults are white in dark mode */
+    select option { background-color: var(--input-bg); color: var(--input-text); }
+    select option:disabled { color: var(--text-muted); }
+    body{color:var(--text-primary); background:var(--bg-primary)}
+    .brand-text{color: var(--text-primary)}
+    .user-text{color: var(--text-secondary)}
+    .user-muted{color: var(--text-muted)}
+    /* Semantic theme-aware utilities used by content templates */
+    .surface     { background: var(--bg-secondary); }
+    .text-body   { color: var(--text-primary); }
+    .text-dim    { color: var(--text-secondary); }
+    .text-dimmer { color: var(--text-muted); }
+    .border-theme{ border-color: var(--border); }
+    .row-hover:hover { background: var(--nav-hover); }
+    .progress-track  { background: var(--bg-secondary); }
+    /* Agent status dot — border matches parent surface so it looks floating */
+    .agent-dot       { border: 2px solid var(--bg-secondary); }
+    .agent-dot-on    { background: #34d399; }
+    .agent-dot-off   { background: var(--bg-secondary); outline: 1px solid var(--border); }
+    /* In light mode, indigo-200 active text is invisible — use a dark indigo instead */
+    html.light .nav-link.active { color: #4338ca; }
+  </style>
+</head>
+<body class="h-full flex text-zinc-100" style="background: var(--bg-primary); color: var(--text-primary);">
+
+{% set _is_kiosk = user is defined and user and user.role.value == 'presentation' %}
+{% if not _is_kiosk %}
+<!-- Sidebar -->
+<aside class="anvil-sidebar w-60 flex-shrink-0 flex flex-col h-screen sticky top-0" style="border-right: 1px solid var(--border);">
+
+  <!-- Brand -->
+  <div class="px-4 pt-5 pb-4" style="border-bottom: 1px solid var(--border);">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-orange-500/20 border border-orange-500/30 flex items-center justify-center flex-shrink-0 text-orange-400 text-base leading-none select-none">⚒</div>
+      <span class="brand-text font-bold text-sm tracking-[0.2em] uppercase">Anvil</span>
+    </div>
+    {% if user is defined and user %}
+    <div class="flex items-center gap-2 mt-3">
+      <div class="w-6 h-6 rounded-full bg-indigo-600/80 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 uppercase">
+        {{ user.username[0] }}
+      </div>
+      <div class="min-w-0">
+        <p class="user-text text-xs font-medium truncate">{{ user.username }}</p>
+        <p class="user-muted text-[11px] truncate">{{ user.role.value }}</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <nav class="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
+    <a href="/dashboard" class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+      </svg>
+      Dashboard
+    </a>
+
+    {% if user is defined and user and user.role.value in ['admin','analyst','viewer'] %}
+    <a href="/jobs" class="nav-link {% if '/jobs' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+      Jobs
+    </a>
+    {% endif %}
+
+    {% if user is defined and user and user.role.value in ['admin','analyst'] %}
+    <a href="/customers" class="nav-link {% if '/customers' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+      </svg>
+      Customers
+    </a>
+    <a href="/wordlists" class="nav-link {% if '/wordlists' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7c0 1.657 3.582 3 8 3s8-1.343 8-3M4 7c0-1.657 3.582-3 8-3s8 1.343 8 3M4 7v5c0 1.657 3.582 3 8 3s8-1.343 8-3V7M4 12v5c0 1.657 3.582 3 8 3s8-1.343 8-3v-5"/>
+      </svg>
+      Wordlists
+    </a>
+    <a href="/templates" class="nav-link {% if '/templates' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+      </svg>
+      Templates
+    </a>
+    {% endif %}
+
+    {% if user is defined and user and user.role.value == 'admin' %}
+    <div class="pt-4 pb-1 px-1">
+      <span class="text-[10px] font-semibold user-muted uppercase tracking-widest">Administration</span>
+    </div>
+    <a href="/users" class="nav-link {% if '/users' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+      </svg>
+      Users
+    </a>
+    <a href="/agents" class="nav-link {% if '/agents' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+      </svg>
+      Agents
+    </a>
+    <a href="/audit" class="nav-link {% if '/audit' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+      </svg>
+      Audit Log
+    </a>
+    <a href="/settings" class="nav-link {% if '/settings' in request.url.path %}active{% endif %}">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+      Settings
+    </a>
+    {% endif %}
+  </nav>
+
+  <div class="px-3 py-3" style="border-top: 1px solid var(--border);">
+    <button id="theme-toggle" class="nav-link w-full justify-start hover:!text-indigo-300 hover:!bg-indigo-900/20">
+      <svg id="theme-icon" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+      </svg>
+      <span id="theme-text">Light Mode</span>
+    </button>
+    <a href="/logout" class="nav-link hover:!text-red-300 hover:!bg-red-900/20">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h6a2 2 0 012 2v1"/>
+      </svg>
+      Sign out
+    </a>
+  </div>
+</aside>
+{% endif %}
+
+<!-- Main content -->
+<div class="flex-1 min-w-0 flex flex-col min-h-screen" style="background: var(--bg-primary);">
+  <main class="flex-1 {% if _is_kiosk %}p-8 max-w-screen-2xl{% else %}p-6 max-w-screen-xl{% endif %} mx-auto w-full">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script>
+  (function() {
+    var SUN_PATH  = 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z';
+    var MOON_PATH = 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z';
+
+    function applyTheme(light) {
+      var html = document.documentElement;
+      var icon = document.getElementById('theme-icon');
+      var text = document.getElementById('theme-text');
+      if (!icon || !text) return;
+      if (light) {
+        html.classList.add('light');
+        icon.querySelector('path').setAttribute('d', MOON_PATH);
+        text.textContent = 'Dark Mode';
+      } else {
+        html.classList.remove('light');
+        icon.querySelector('path').setAttribute('d', SUN_PATH);
+        text.textContent = 'Light Mode';
+      }
+    }
+
+    applyTheme(document.documentElement.classList.contains('light'));
+
+    var toggle = document.getElementById('theme-toggle');
+    if (toggle && !toggle._anvilBound) {
+      toggle._anvilBound = true;
+      toggle.addEventListener('click', function() {
+        var goLight = !document.documentElement.classList.contains('light');
+        localStorage.setItem('theme', goLight ? 'light' : 'dark');
+        applyTheme(goLight);
+      });
+    }
+  })();
+</script>
+
+</body>
+</html>

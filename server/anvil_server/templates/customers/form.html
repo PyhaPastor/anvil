@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if customer else 'New' }} Customer{% endblock %}
+{% block content %}
+<div class="max-w-xl mx-auto space-y-5">
+  <div class="flex items-center gap-3">
+    <a href="/customers" class="text-zinc-500 hover:text-zinc-300 text-sm">← Customers</a>
+    <h1 class="text-xl font-bold text-white">{{ 'Edit customer' if customer else 'New customer' }}</h1>
+  </div>
+
+  <form method="post" action="{{ '/customers/'+customer.id|string+'/edit' if customer else '/customers/new' }}" class="card space-y-4">
+    <div>
+      <label class="label">Real name <span class="text-zinc-500 text-xs">(internal, never shown to presentation accounts)</span></label>
+      <input name="name" type="text" required class="input"
+             placeholder="e.g. ACME Corporation"
+             value="{{ customer.name if customer else '' }}"/>
+    </div>
+    <div>
+      <label class="label">Presentation name <span class="text-zinc-500 text-xs">(shown on presentation dashboards)</span></label>
+      <input name="presentation_name" type="text" required class="input"
+             placeholder="e.g. Client A"
+             value="{{ customer.presentation_name if customer else '' }}"/>
+    </div>
+    <div>
+      <label class="label">Description <span class="text-zinc-500 text-xs">(optional)</span></label>
+      <textarea name="description" rows="3" class="input"
+                placeholder="Engagement notes…">{{ customer.description if customer else '' }}</textarea>
+    </div>
+    <div class="flex items-center justify-between pt-2 border-t border-theme">
+      <a href="/customers" class="btn-secondary text-sm">Cancel</a>
+      <button type="submit" class="{% if customer %}btn-save{% else %}btn-create{% endif %}">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {% if customer %}
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          {% else %}
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          {% endif %}
+        </svg>
+        {{ 'Save changes' if customer else 'Create customer' }}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

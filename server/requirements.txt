@@ -1,0 +1,51 @@
+# Anvil Server dependencies
+# Uses >= pins so pip resolves the latest wheel compatible with your Python version.
+# Tested on Python 3.11, 3.12, 3.13 (Ubuntu 22.04 / Debian 12 / Debian Trixie).
+
+# Core web framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+gunicorn>=22.0.0
+
+# Database
+sqlalchemy>=2.0.31
+alembic>=1.13.0
+aiosqlite>=0.20.0
+
+# Auth & security
+bcrypt>=4.0.0
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.9
+itsdangerous>=2.2.0
+cryptography>=42.0.0
+slowapi>=0.1.9
+
+# Templating & HTTP
+jinja2>=3.1.4
+aiofiles>=23.2.1
+httpx>=0.27.0
+
+# WebSockets
+websockets>=12.0
+
+# Config
+toml>=0.10.2
+
+# Pydantic v2 — pydantic-core >= 2.23 ships Python 3.13 wheels
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+
+# Sanitisation
+bleach>=6.1.0
+
+# File type detection
+python-magic>=0.4.27
+
+# PDF export
+reportlab>=4.2.0
+
+# Email notifications
+aiosmtplib>=3.0.0
+
+# System metrics
+psutil>=6.0.0

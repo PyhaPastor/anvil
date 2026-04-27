@@ -1,0 +1,126 @@
+{
+  "folders": [
+    {
+      "name": "anvil-server",
+      "path": "server"
+    },
+    {
+      "name": "anvil-agent",
+      "path": "agent"
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "editor.formatOnSave": true,
+    "editor.rulers": [100],
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/*.pyc": true,
+      "**/venv": true,
+      "**/*.db-shm": true,
+      "**/*.db-wal": true
+    },
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter",
+      "editor.formatOnSave": true
+    },
+    "[html]": {
+      "editor.defaultFormatter": "vscode.html-language-features"
+    },
+    "[toml]": {
+      "editor.defaultFormatter": "tamasfe.even-better-toml"
+    },
+    "emmet.includeLanguages": {
+      "jinja-html": "html"
+    },
+    "files.associations": {
+      "*.html": "jinja-html"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.black-formatter",
+      "ms-python.pylint",
+      "tamasfe.even-better-toml",
+      "samuelcolvin.jinjahtml",
+      "bradlc.vscode-tailwindcss",
+      "humao.rest-client",
+      "eamodio.gitlens"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run Anvil Server (dev)",
+        "type": "python",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+          "anvil_server.main:app",
+          "--host", "0.0.0.0",
+          "--port", "8443",
+          "--ssl-keyfile", "./certs/anvil.key",
+          "--ssl-certfile", "./certs/anvil.crt",
+          "--reload"
+        ],
+        "cwd": "${workspaceFolder:anvil-server}",
+        "env": {
+          "ANVIL_CONFIG": "${workspaceFolder:anvil-server}/config.toml"
+        },
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Run Anvil Agent (dev)",
+        "type": "python",
+        "request": "launch",
+        "module": "anvil_agent.main",
+        "cwd": "${workspaceFolder:anvil-agent}",
+        "env": {
+          "ANVIL_AGENT_CONFIG": "${workspaceFolder:anvil-agent}/config.toml"
+        },
+        "console": "integratedTerminal",
+        "justMyCode": true
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Server: install deps",
+        "type": "shell",
+        "command": "python3 -m venv venv && venv/bin/pip install --prefer-binary -r requirements.txt",
+        "options": { "cwd": "${workspaceFolder:anvil-server}" },
+        "group": "build",
+        "presentation": { "reveal": "always", "panel": "new" }
+      },
+      {
+        "label": "Agent: install deps",
+        "type": "shell",
+        "command": "python3 -m venv venv && venv/bin/pip install --prefer-binary -r requirements.txt",
+        "options": { "cwd": "${workspaceFolder:anvil-agent}" },
+        "group": "build",
+        "presentation": { "reveal": "always", "panel": "new" }
+      },
+      {
+        "label": "Server: tail error log",
+        "type": "shell",
+        "command": "sudo tail -f /opt/anvil/server/logs/error.log",
+        "group": "test",
+        "presentation": { "reveal": "always", "panel": "new" },
+        "isBackground": true
+      },
+      {
+        "label": "Server: restart service",
+        "type": "shell",
+        "command": "sudo systemctl restart anvil-server && sudo systemctl status anvil-server",
+        "group": "test",
+        "presentation": { "reveal": "always", "panel": "new" }
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<div class="space-y-5">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-white">Customers</h1>
+    <a href="/customers/new" class="btn-create">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      New customer
+    </a>
+  </div>
+  <div class="card overflow-x-auto">
+    {% if customers %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+          <th class="pb-3 pr-4">Name</th>
+          <th class="pb-3 pr-4">Presentation name</th>
+          <th class="pb-3 pr-4">Jobs</th>
+          <th class="pb-3 pr-4">Created</th>
+          <th class="pb-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-zinc-800">
+        {% for c in customers %}
+        <tr class="hover:bg-zinc-800/40">
+          <td class="py-3 pr-4 font-medium text-zinc-100">{{ c.name }}</td>
+          <td class="py-3 pr-4 text-zinc-400">{{ c.presentation_name }}</td>
+          <td class="py-3 pr-4 text-zinc-500">{{ c.jobs|length }}</td>
+          <td class="py-3 pr-4 text-xs text-zinc-500">{{ c.created_at.strftime('%Y-%m-%d') }}</td>
+          <td class="py-3">
+            <a href="/customers/{{ c.id }}/edit" class="btn-secondary text-xs">Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-sm text-zinc-500 py-4 text-center">No customers yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

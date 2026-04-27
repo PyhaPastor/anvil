@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Agents{% endblock %}
+{% block content %}
+<div class="space-y-5">
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-bold text-body">Agents</h1>
+    <a href="/agents/register" class="btn-create text-sm">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Add agent
+    </a>
+  </div>
+
+  <!-- Install command strip — primary way to add agents -->
+  <div class="card border-t-[3px] border-t-indigo-500 flex flex-col sm:flex-row sm:items-center gap-3">
+    <div class="flex-1 min-w-0">
+      <p class="text-xs font-semibold text-dim uppercase tracking-wider mb-1">Add agent — run on the agent machine</p>
+      <pre id="install-cmd" class="font-mono text-xs text-blue-300 overflow-x-auto whitespace-nowrap">curl -sfk {{ request.base_url | string | replace('http://', 'https://') }}agents/install | sudo bash</pre>
+      <p class="text-xs text-dimmer mt-1">Installs, self-registers (hostname as name), and starts the service automatically.</p>
+    </div>
+    <button onclick="copyCmd('install-cmd', this)"
+            class="btn-upload text-xs flex-shrink-0 self-start sm:self-center">Copy</button>
+  </div>
+
+  <div class="card overflow-x-auto">
+    {% if agents %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-[11px] text-dimmer uppercase tracking-wider">
+          <th class="pb-3 pr-4 font-semibold">Name</th>
+          <th class="pb-3 pr-4 font-semibold">Status</th>
+          <th class="pb-3 pr-4 font-semibold">Hostname{% if user.role.value == 'admin' %} / IP{% endif %}</th>
+          <th class="pb-3 pr-4 font-semibold">Last seen</th>
+          <th class="pb-3 pr-4 font-semibold">Compute</th>
+          <th class="pb-3 font-semibold">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in agents %}
+        <tr class="border-t border-theme row-hover transition-colors {% if not a.is_active %}opacity-60{% endif %}">
+          <td class="py-3 pr-4 font-medium text-body">{{ a.name }}</td>
+          <td class="py-3 pr-4">
+            {% if not a.is_active %}
+            <span class="flex items-center gap-1.5 text-xs text-dimmer">
+              <span class="w-2 h-2 rounded-full bg-zinc-600 flex-shrink-0"></span>Inactive
+            </span>
+            {% elif a.is_online %}
+            <span class="flex items-center gap-1.5 text-xs text-emerald-400">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0"></span>Online
+            </span>
+            {% else %}
+            <span class="flex items-center gap-1.5 text-xs text-dimmer">
+              <span class="w-2 h-2 rounded-full bg-zinc-500 flex-shrink-0"></span>Offline
+            </span>
+            {% endif %}
+          </td>
+          <td class="py-3 pr-4 text-dim text-xs">
+            <div>{{ a.hostname or '—' }}</div>
+            {% if user.role.value == 'admin' and a.ip_address %}
+            <div class="text-dimmer font-mono mt-0.5">{{ a.ip_address }}</div>
+            {% endif %}
+          </td>
+          <td class="py-3 pr-4 text-xs text-dimmer tabular-nums">
+            {{ a.last_seen.strftime('%Y-%m-%d %H:%M') if a.last_seen else 'Never' }}
+          </td>
+          <td class="py-3 pr-4 text-xs text-dim">
+            {% if a.capabilities %}
+              {% if a.capabilities.cpu_count %}
+              <div class="text-dim">CPU ×{{ a.capabilities.cpu_count }}</div>
+              {% endif %}
+              {% if a.capabilities.gpus %}
+                {% for g in a.capabilities.gpus %}
+                <div class="text-zinc-300 mt-0.5">{{ g.name | shorten_gpu }}{% if g.vram_mb %} <span class="text-dimmer">{{ (g.vram_mb / 1024) | round(0) | int }}GB</span>{% endif %}</div>
+                {% endfor %}
+              {% endif %}
+              {% if not a.capabilities.gpus and not a.capabilities.cpu_count %}—{% endif %}
+            {% else %}—{% endif %}
+            {# Live utilization bars from latest heartbeat #}
+            {% set h = health_by_agent.get(a.id) %}
+            {% if h and a.is_active and (h.gpu_util_pct is not none or h.cpu_util_pct is not none or h.ram_used_mb is not none or h.disk_free_gb is not none) %}
+            <div class="mt-2 space-y-1 min-w-[140px]">
+              {% if h.gpu_util_pct is not none %}
+              <div class="flex items-center gap-1.5">
+                <span class="text-zinc-500 w-8 flex-shrink-0">GPU</span>
+                <div class="flex-1 bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                  <div class="bg-indigo-500 h-1.5 rounded-full" style="width:{{ h.gpu_util_pct | round(0) | int }}%"></div>
+                </div>
+                <span class="text-zinc-400 w-7 text-right flex-shrink-0">{{ h.gpu_util_pct | round(0) | int }}%</span>
+                {% if h.gpu_temp_c is not none %}
+                <span class="text-zinc-500 flex-shrink-0">{{ h.gpu_temp_c | round(0) | int }}°C</span>
+                {% endif %}
+              </div>
+              {% endif %}
+              {% if h.cpu_util_pct is not none %}
+              <div class="flex items-center gap-1.5">
+                <span class="text-zinc-500 w-8 flex-shrink-0">CPU</span>
+                <div class="flex-1 bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                  <div class="bg-blue-500 h-1.5 rounded-full" style="width:{{ h.cpu_util_pct | round(0) | int }}%"></div>
+                </div>
+                <span class="text-zinc-400 w-7 text-right flex-shrink-0">{{ h.cpu_util_pct | round(0) | int }}%</span>
+              </div>
+              {% endif %}
+              {% if h.ram_used_mb is not none and h.ram_total_mb is not none and h.ram_total_mb > 0 %}
+              {% set ram_pct = (h.ram_used_mb / h.ram_total_mb * 100) | round(0) | int %}
+              <div class="flex items-center gap-1.5">
+                <span class="text-zinc-500 w-8 flex-shrink-0">RAM</span>
+                <div class="flex-1 bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                  <div class="bg-emerald-500 h-1.5 rounded-full" style="width:{{ ram_pct }}%"></div>
+                </div>
+                <span class="text-zinc-400 w-7 text-right flex-shrink-0">{{ ram_pct }}%</span>
+              </div>
+              {% endif %}
+              {% if h.disk_free_gb is not none and h.disk_total_gb is not none and h.disk_total_gb > 0 %}
+              {% set disk_used_pct = ((h.disk_total_gb - h.disk_free_gb) / h.disk_total_gb * 100) | round(0) | int %}
+              <div class="flex items-center gap-1.5">
+                <span class="text-zinc-500 w-8 flex-shrink-0">Disk</span>
+                <div class="flex-1 bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                  <div class="{% if disk_used_pct > 90 %}bg-red-500{% elif disk_used_pct > 75 %}bg-amber-500{% else %}bg-teal-500{% endif %} h-1.5 rounded-full" style="width:{{ disk_used_pct }}%"></div>
+                </div>
+                <span class="text-zinc-400 flex-shrink-0 whitespace-nowrap">{{ h.disk_free_gb | round(0) | int }} GB free</span>
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td class="py-3">
+            <div class="flex items-center gap-3">
+              {% if a.is_active %}
+              <form method="post" action="/agents/{{ a.id }}/deactivate"
+                    onsubmit="return confirm('Deactivate agent {{ a.name }}?\n\nThe agent will stop receiving jobs.')">
+                <button type="submit" class="btn-destruct text-xs">Deactivate</button>
+              </form>
+              <!-- Wordlist cache button -->
+              <button type="button"
+                      class="btn-neutral text-xs"
+                      onclick="openCacheModal({{ a.id }}, '{{ a.name }}')">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0 2 1 3 3 3h10c2 0 3-1 3-3M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3"/>
+                </svg>
+                Cache
+                {% if a.wordlist_cache %}
+                <span class="px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300 text-[10px]">{{ a.wordlist_cache|length }}</span>
+                {% endif %}
+              </button>
+              {% else %}
+              <form method="post" action="/agents/{{ a.id }}/delete"
+                    onsubmit="return confirm('Permanently delete agent {{ a.name }}?\n\nThis cannot be undone. Associated jobs will be unassigned.')">
+                <button type="submit" class="btn-destruct text-xs">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="flex flex-col items-center justify-center py-8 text-center">
+      <div class="w-12 h-12 rounded-full surface flex items-center justify-center mb-3">
+        <svg class="w-6 h-6 text-dimmer" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+        </svg>
+      </div>
+      <p class="text-sm text-dimmer">No agents yet.</p>
+      <p class="text-xs text-dimmer mt-1">Copy the install command above and run it on an agent machine.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Wordlist cache modal -->
+<div id="cache-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60 backdrop-blur-sm"
+     onclick="if(event.target===this)closeCacheModal()">
+  <div class="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+      <h2 class="text-sm font-semibold text-white">Wordlist cache — <span id="cache-modal-agent-name" class="text-zinc-400"></span></h2>
+      <button onclick="closeCacheModal()" class="text-zinc-500 hover:text-zinc-200 text-lg leading-none">✕</button>
+    </div>
+    <div class="px-5 py-4 space-y-2 max-h-96 overflow-y-auto" id="cache-modal-body">
+      <p class="text-xs text-zinc-500 animate-pulse">Loading…</p>
+    </div>
+    <div class="px-5 py-3 border-t border-zinc-800 text-xs text-zinc-600">
+      Deletions are sent to the agent immediately. The agent must be online.
+    </div>
+  </div>
+</div>
+
+<script>
+function copyCmd(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent.trim()).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  });
+}
+// Auto-refresh every 30 seconds to reflect agent online/offline status changes
+setTimeout(() => location.reload(), 30000);
+
+let _cacheAgentId = null;
+
+async function openCacheModal(agentId, agentName) {
+  _cacheAgentId = agentId;
+  document.getElementById('cache-modal-agent-name').textContent = agentName;
+  document.getElementById('cache-modal').classList.remove('hidden');
+  await refreshCacheModal();
+}
+
+function closeCacheModal() {
+  document.getElementById('cache-modal').classList.add('hidden');
+  _cacheAgentId = null;
+}
+
+async function refreshCacheModal() {
+  const body = document.getElementById('cache-modal-body');
+  body.innerHTML = '<p class="text-xs text-zinc-500 animate-pulse">Loading…</p>';
+  try {
+    const r = await fetch(`/agents/${_cacheAgentId}/wordlist-cache`);
+    const data = await r.json();
+    const cache = data.cache || [];
+    if (cache.length === 0) {
+      body.innerHTML = '<p class="text-xs text-zinc-500">No wordlists cached on this agent.</p>';
+      return;
+    }
+    body.innerHTML = cache.map(e => {
+      const sizeGb = (e.size_bytes / 1024 ** 3).toFixed(1);
+      const display = e.name.includes('_') ? e.name.split('_').slice(1).join('_') : e.name;
+      return `
+        <div class="flex items-center justify-between gap-3 py-2 border-b border-zinc-800 last:border-0">
+          <div class="min-w-0">
+            <p class="text-sm text-zinc-200 font-mono truncate" title="${e.name}">${display}</p>
+            <p class="text-xs text-zinc-500">${sizeGb} GB</p>
+          </div>
+          <button class="btn-destruct text-xs flex-shrink-0"
+                  onclick="deleteCachedWordlist('${e.name}', this)">Delete</button>
+        </div>`;
+    }).join('');
+  } catch {
+    body.innerHTML = '<p class="text-xs text-red-400">Failed to load cache. Is the server reachable?</p>';
+  }
+}
+
+async function deleteCachedWordlist(name, btn) {
+  if (!confirm(`Delete "${name}" from the agent cache?\n\nThe file will be removed from the agent's disk.`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const r = await fetch(`/agents/${_cacheAgentId}/wordlist-cache/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await r.json();
+    if (data.status === 'ok') {
+      if (!data.ws_delivered) {
+        alert('Delete queued but the agent is currently offline. The file will be removed on next connection.');
+      }
+      await refreshCacheModal();
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+      alert('Delete failed: ' + (data.detail || 'unknown error'));
+    }
+  } catch {
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+    alert('Request failed. Check server connectivity.');
+  }
+}
+</script>
+{% endblock %}

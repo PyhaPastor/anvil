@@ -1,0 +1,49 @@
+# Anvil Server — example configuration
+# Copy this file to config.toml and edit before running setup.sh
+
+[server]
+host  = "0.0.0.0"
+port  = 443
+debug = false
+# Generate with: python3 -c "import secrets; print(secrets.token_hex(64))"
+secret_key      = "CHANGE_ME_BEFORE_FIRST_RUN"
+session_max_age = 28800
+
+[database]
+# SQLite (default — zero ops, file-based)
+url = "sqlite+aiosqlite:///./anvil.db"
+# PostgreSQL (production):
+# url = "postgresql+asyncpg://anvil:strongpassword@localhost/anvil"
+
+[tls]
+mode      = "self_signed"   # "self_signed" | "provided"
+cert_file = "./certs/anvil.crt"
+key_file  = "./certs/anvil.key"
+min_version = "TLSv1.2"
+
+[storage]
+wordlists_dir  = "./data/wordlists"
+rules_dir      = "./data/rules"
+hashlists_dir  = "./data/hashlists"
+exports_dir    = "./data/exports"
+max_upload_bytes    = 524288000   # 500 MB
+max_hashlist_bytes  = 104857600  # 100 MB
+allowed_hashlist_extensions = [".txt", ".hash", ".hashes", ".lst", ".pot"]
+
+[agent]
+heartbeat_timeout  = 60
+agent_token_expiry = 2592000   # 30 days
+
+[notifications]
+enabled       = false
+smtp_host     = ""
+smtp_port     = 587
+smtp_user     = ""
+smtp_password = ""
+smtp_from     = "anvil@example.com"
+smtp_tls      = true
+
+[security]
+bcrypt_rounds = 12
+login_rate_limit = "10/minute"
+api_rate_limit   = "300/minute"

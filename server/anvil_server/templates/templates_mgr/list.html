@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Attack Templates{% endblock %}
+{% block content %}
+<div class="space-y-5">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Attack templates</h1>
+      <p class="text-sm text-zinc-500 mt-0.5">Pre-defined attack profiles for common scenarios</p>
+    </div>
+    <a href="/templates/new" class="btn-create">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      New template
+    </a>
+  </div>
+
+  <div class="card overflow-x-auto">
+    {% if templates %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+          <th class="pb-3 pr-4">Name</th>
+          <th class="pb-3 pr-4">Attack mode</th>
+          <th class="pb-3 pr-4">Hash type</th>
+          <th class="pb-3 pr-4">Description</th>
+          <th class="pb-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-zinc-800">
+        {% for t in templates %}
+        <tr class="hover:bg-zinc-800/40">
+          <td class="py-3 pr-4 font-medium text-zinc-100">{{ t.name }}</td>
+          <td class="py-3 pr-4 text-zinc-400 text-xs">{{ t.attack_mode }}</td>
+          <td class="py-3 pr-4 text-zinc-400 text-xs">{{ t.hash_type or 'Auto-detect' }}</td>
+          <td class="py-3 pr-4 text-zinc-500 text-sm">{{ t.description or '—' }}</td>
+          <td class="py-3">
+            <div class="flex items-center gap-3">
+              <a href="/jobs/new?template_id={{ t.id }}" class="btn-create text-xs">Use</a>
+              <form method="post" action="/templates/{{ t.id }}/delete"
+                    onsubmit="return confirm('Delete template {{ t.name }}?')">
+                <button type="submit" class="btn-destruct text-xs">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center py-10">
+      <p class="text-zinc-500 text-sm">No templates yet.</p>
+      <p class="text-zinc-600 text-xs mt-1">Create templates for common attacks like "Quick NTLM dictionary" or "Full hybrid WPA".</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
