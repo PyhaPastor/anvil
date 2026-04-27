@@ -91,7 +91,23 @@ fi
 # ── Directory layout ──────────────────────────────────────────────────────────
 section "Setting up directories"
 mkdir -p "${INSTALL_DIR}"/{certs,logs}
-rsync -a --exclude='venv' "$(dirname "$0")/" "${INSTALL_DIR}/"
+rsync -a --exclude='venv' --exclude='config.toml' "$(dirname "$0")/" "${INSTALL_DIR}/"
+# Only install config on first run — never overwrite a live config (preserves api_token)
+AGENT_CONFIG="${INSTALL_DIR}/config.toml"
+if [[ ! -f "${AGENT_CONFIG}" ]]; then
+    SRC_CONFIG="$(dirname "$0")/config.toml"
+    SRC_EXAMPLE="$(dirname "$0")/config.toml.example"
+    if [[ -f "${SRC_CONFIG}" ]]; then
+        cp "${SRC_CONFIG}" "${AGENT_CONFIG}"
+    elif [[ -f "${SRC_EXAMPLE}" ]]; then
+        cp "${SRC_EXAMPLE}" "${AGENT_CONFIG}"
+    else
+        error "No config.toml or config.toml.example found in source directory"
+    fi
+    info "config.toml installed — edit it and re-run to register with the server"
+else
+    info "config.toml already exists — skipping (live config preserved)"
+fi
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
 chmod 750 "${INSTALL_DIR}"
 

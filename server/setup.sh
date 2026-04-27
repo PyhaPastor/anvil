@@ -68,7 +68,15 @@ rsync -a --exclude='venv' --exclude='*.db' --exclude='*.db-*' --exclude='config.
     "$(dirname "$0")/" "${INSTALL_DIR}/"
 # Only copy config on first install — never overwrite a live config (preserves secret key)
 if [[ ! -f "${CONFIG_FILE}" ]]; then
-    cp "$(dirname "$0")/config.toml" "${CONFIG_FILE}"
+    SRC_CONFIG="$(dirname "$0")/config.toml"
+    SRC_EXAMPLE="$(dirname "$0")/config.toml.example"
+    if [[ -f "${SRC_CONFIG}" ]]; then
+        cp "${SRC_CONFIG}" "${CONFIG_FILE}"
+    elif [[ -f "${SRC_EXAMPLE}" ]]; then
+        cp "${SRC_EXAMPLE}" "${CONFIG_FILE}"
+    else
+        error "No config.toml or config.toml.example found in source directory"
+    fi
     info "config.toml installed"
 else
     info "config.toml already exists — skipping (live config preserved)"
