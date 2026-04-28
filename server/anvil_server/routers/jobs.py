@@ -173,6 +173,13 @@ async def create_job(
     hash_files: List[UploadFile] = File(default=[]),
     existing_hashlist_ids: str = Form(""),   # JSON array of existing HashList IDs
 ):
+    # A customer is required so per-customer hash deletion has a clear scope
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="A customer must be selected")
+    customer = await db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=400, detail="Selected customer does not exist")
+
     # Validate agent exists
     if agent_id:
         agent = await db.get(Agent, agent_id)

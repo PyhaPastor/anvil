@@ -36,11 +36,16 @@ Anvil provides a multi-user web dashboard for managing hash cracking jobs, custo
 
 ## Requirements
 
-### Server
+### Server (online install)
 - Python 3.11, 3.12, or 3.13
 - Ubuntu 22.04 LTS / Debian 12 (Bookworm) / Debian Trixie
 - 1 GB RAM minimum (4 GB recommended)
 - Port 443 (or configure a different port)
+
+### Server (offline / airgapped install)
+- **Ubuntu 24.04 LTS (Noble), x86_64** — the offline bundle is built specifically against this target's glibc and Python ABI
+- Python 3.12 (Ubuntu 24.04 default)
+- A second, internet-connected Ubuntu 24.04 host to build the bundle on
 
 > **Python 3.13 note:** The setup script passes `--prefer-binary` to pip, which downloads
 > pre-built wheels instead of compiling Rust extensions from source. This avoids the
@@ -100,10 +105,74 @@ The agent appears in **Admin → Agents** immediately after installation — no 
 
 1. Upload a wordlist under **Wordlists**
 2. Go to **Jobs → New job**
-3. Upload one or more hash list files
-4. Select the hash type (auto-detected via `hashcat --identify`)
-5. Choose attack mode, wordlist, rules, and mask
-6. Select an online agent and click **Launch job**
+3. Select a **customer** — required for every job (used to scope per-customer hash deletion)
+4. Upload one or more hash list files
+5. Select the hash type (auto-detected via `hashcat --identify`)
+6. Choose attack mode, wordlist, rules, and mask
+7. Select an online agent and click **Launch job**
+
+---
+
+## Offline / airgapped install
+
+For environments with no internet access on the server, Anvil ships a two-script flow:
+build a bundle on a connected machine, copy it across, run the installer.
+
+> **Hard requirement:** both the build host **and** the target server must be
+> **Ubuntu 24.04 LTS (Noble), x86_64**. The bundle pins to `python3.12` /
+> `cp312` wheels and Noble's `.deb` set — running it on a different Ubuntu
+> release or another distro will fail at install time. If you need a different
+> target, edit the `TARGET_*` variables at the top of `package-offline.sh`.
+
+### 1. Build the bundle (on a connected Ubuntu 24.04 host)
+
+```bash
+git clone <repo> anvil
+cd anvil/server
+bash package-offline.sh
+```
+
+`package-offline.sh`:
+- Verifies the build host is Ubuntu 24.04 with `python3.12` available
+- Resolves the full transitive dependency closure for the required apt packages
+  (`libmagic1`, `libssl-dev`, `openssl`, `python3.12-venv`, `build-essential`,
+  `libcap2-bin`, `rsync`, …) and downloads each `.deb` into `offline/debs/`
+- Downloads every Python wheel listed in `requirements.txt` (plus `pip`,
+  `setuptools`, `wheel`) into `offline/wheels/`, restricted to `cp312` /
+  `manylinux` ABI tags so they install cleanly on the airgapped target
+- Writes `offline/MANIFEST.txt` with the build host details, target, and counts
+
+### 2. Transfer to the airgapped server
+
+SCP (or otherwise move) the **entire `server/` directory** — including the
+freshly built `offline/` folder inside it — to the target host.
+
+```bash
+scp -r anvil/server/ user@airgapped-host:/tmp/anvil-server/
+```
+
+### 3. Install on the airgapped server
+
+```bash
+cd /tmp/anvil-server
+sudo bash setup-offline.sh
+```
+
+`setup-offline.sh` does everything `setup.sh` does, but without ever touching
+the network:
+- Verifies `offline/debs/` and `offline/wheels/` are populated
+- Installs system packages from the local `.deb` set via `apt-get install --no-download`
+- Creates the `anvil` service user and `/opt/anvil/server/` directory layout
+- Stages the agent source under `agent-dist/` for in-dashboard download
+- Creates the venv and installs Python deps with `pip install --no-index --find-links=offline/wheels/`
+- Prompts for the server hostname/IP, generates a 4096-bit self-signed TLS
+  certificate with the correct SANs, and writes the SAN into `config.toml`
+- Generates the JWT secret and agent provisioning key
+- Initialises the database, seeds the default admin and built-in rule files
+- Installs and starts the `anvil-server` systemd service
+
+The default credentials and post-install steps are identical to the online
+install.
 
 ---
 
@@ -195,12 +264,23 @@ The server regenerates the certificate on restart.
 1. Upload a wordlist under **Wordlists** (`.txt`, `.lst`, `.dict`, `.wl`)
 2. Optionally upload rule files (`.rule`, `.rules`) under **Wordlists → Upload rule file**
 3. Go to **Jobs → New job**
-4. Upload one or more hash list files — click **+ Add another hash file** to attach additional files; duplicate hashes across files are automatically deduplicated
-5. Select hash type — Anvil auto-detects via `hashcat --identify` with manual override
-6. Choose attack mode, wordlist, rules, and mask as needed
-7. Select an online agent (pre-selected automatically if only one is available) and click **Launch job**
+4. Pick a **customer** — required. Every job must be scoped to a customer so the per-customer "Delete hashes" action has a clear blast radius. The form blocks submission without one.
+5. Upload one or more hash list files — click **+ Add another hash file** to attach additional files; duplicate hashes across files are automatically deduplicated
+6. Select hash type — Anvil auto-detects via `hashcat --identify` with manual override
+7. Choose attack mode, wordlist, rules, and mask as needed
+8. Select an online agent (pre-selected automatically if only one is available) and click **Launch job**
 
 Live progress (H/s, %, ETA, GPU temp) streams to the job detail page via WebSocket.
+
+### Deleting a customer's hashes
+
+The customers list has a per-row **Delete hashes** action that purges every
+`HashList` (and cascaded `Hash` row) for every job belonging to that customer,
+and unlinks the underlying hash files from disk when no surviving hash list
+still references them. Job rows themselves are kept, and `total_hashes` /
+`cracked_count` are preserved so the **Accounts Cracked** dashboard stat and
+historical crack-rate remain accurate after a purge. The action is recorded
+in the audit log as `customer_hashes_deleted`.
 
 ---
 
@@ -353,7 +433,10 @@ anvil/
 │   │   └── templates/           # Jinja2/Alpine.js UI
 │   ├── config.toml
 │   ├── requirements.txt
-│   └── setup.sh
+│   ├── setup.sh                # Online installer
+│   ├── package-offline.sh      # Build offline bundle (Ubuntu 24.04 build host)
+│   ├── setup-offline.sh        # Airgapped installer (Ubuntu 24.04 target)
+│   └── offline/                # .deb + .whl bundle, produced by package-offline.sh
 └── agent/
     ├── anvil_agent/
     │   ├── main.py              # Entry point, poll + heartbeat loops

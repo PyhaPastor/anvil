@@ -17,6 +17,9 @@ server/data/exports/
 server/logs/
 agent/logs/
 
+# Offline package staging
+server/offline/
+
 # Personal notes
 to do.txt
 

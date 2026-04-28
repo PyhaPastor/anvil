@@ -31,9 +31,9 @@
                  value="{{ prefill.name if prefill else '' }}"/>
         </div>
         <div>
-          <label class="label">Customer</label>
-          <select name="customer_id" class="select">
-            <option value="">— None —</option>
+          <label class="label">Customer *</label>
+          <select name="customer_id" class="select" required>
+            <option value="" disabled selected>— Select a customer —</option>
             {% for c in customers %}
             <option value="{{ c.id }}">{{ c.name }}</option>
             {% endfor %}

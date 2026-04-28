@@ -17,6 +17,7 @@
           <th class="pb-3 pr-4">Name</th>
           <th class="pb-3 pr-4">Presentation name</th>
           <th class="pb-3 pr-4">Jobs</th>
+          <th class="pb-3 pr-4">Hashes</th>
           <th class="pb-3 pr-4">Created</th>
           <th class="pb-3">Actions</th>
         </tr>
@@ -26,10 +27,20 @@
         <tr class="hover:bg-zinc-800/40">
           <td class="py-3 pr-4 font-medium text-zinc-100">{{ c.name }}</td>
           <td class="py-3 pr-4 text-zinc-400">{{ c.presentation_name }}</td>
-          <td class="py-3 pr-4 text-zinc-500">{{ c.jobs|length }}</td>
+          <td class="py-3 pr-4 text-zinc-500">{{ job_counts.get(c.id, 0) }}</td>
+          <td class="py-3 pr-4 text-zinc-500">{{ "{:,}".format(hash_counts.get(c.id, 0)) }}</td>
           <td class="py-3 pr-4 text-xs text-zinc-500">{{ c.created_at.strftime('%Y-%m-%d') }}</td>
           <td class="py-3">
-            <a href="/customers/{{ c.id }}/edit" class="btn-secondary text-xs">Edit</a>
+            <div class="flex items-center gap-2">
+              <a href="/customers/{{ c.id }}/edit" class="btn-create">Edit</a>
+              <form method="post" action="/customers/{{ c.id }}/hashes/delete"
+                    onsubmit="return confirm('Delete ALL uploaded hashes for {{ c.name|e }}? This will remove {{ hash_counts.get(c.id, 0) }} hash record(s) and the underlying upload files. Cracked plaintexts will also be lost. This cannot be undone.')">
+                <button type="submit" class="btn-destruct"
+                        {% if not hash_counts.get(c.id, 0) %}disabled style="opacity:0.4;cursor:not-allowed"{% endif %}>
+                  Delete hashes
+                </button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}
