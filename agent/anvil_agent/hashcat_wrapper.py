@@ -71,6 +71,7 @@ class HashcatWrapper:
         mask: Optional[str],
         extra_flags: Optional[str],
         started_at_ts: float,
+        outfile_path: Path,
     ) -> AsyncIterator[ProgressEvent]:
         self._cancelled = False
 
@@ -80,10 +81,11 @@ class HashcatWrapper:
             yield ProgressEvent(status="error", error=f"hashcat binary not found: {binary}")
             return
 
-        # Build output file for cracked results
+        # Cracked-results outfile lives inside the per-job dir, so the runner's
+        # rmtree(job_dir) at end-of-run wipes plaintexts along with hash lists.
         workdir = Path(settings.hashcat.workdir)
         workdir.mkdir(parents=True, exist_ok=True)
-        outfile = workdir / f"job_{job_id}.potfile"
+        outfile = outfile_path
 
         # Pre-create XDG dirs under our workdir.
         # - XDG_DATA_HOME: hashcat session .pid / .induct files

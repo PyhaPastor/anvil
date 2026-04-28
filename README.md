@@ -413,6 +413,7 @@ sudo journalctl -u     anvil-agent -f
 - Audit log records all user actions including failed logins
 - HTTP security headers: HSTS, CSP, X-Frame-Options: DENY, X-Content-Type-Options, Referrer-Policy
 - Agent install script endpoint can be restricted to specific IP/CIDR ranges
+- Agent-side residual data: per-job hash list files and the hashcat outfile (cracked plaintexts) live under `workdir/jobs/job_<id>/` and are wiped at end-of-run (completed, failed, **and** cancelled). Cached wordlists and rules persist across jobs by design — wipe `/var/lib/anvil-agent/workdir` before redeploying or disposing of an agent host. See [docs/architecture-and-security.md](docs/architecture-and-security.md) §13 for the full lifecycle matrix.
 
 ---
 

@@ -65,6 +65,7 @@ class JobRunner:
                 mask=job.get("mask"),
                 extra_flags=job.get("extra_flags"),
                 started_at_ts=started,
+                outfile_path=job_dir / "cracked.potfile",
             ):
                 if cancel_event.is_set():
                     wrapper.cancel()
