@@ -793,11 +793,16 @@ function commandCenter() {
         this._startedAt = null;
       }
 
-      this.activeLabel = running.length === 1
-        ? (running[0].id ? `Job #${running[0].id}` : '')
-        : `${running.length} jobs`;
+      // Prefer an actually-running sibling for primary-derived fields (wordlist,
+      // progress, candidate, GPU stats). Falls back to the first job only when
+      // every active job is still queued. Defense-in-depth against the backend
+      // ordering breaking — without this, a batch with one running + N queued
+      // would render the queued sibling's name with 0% progress.
+      const primary = running.find(j => j.status === 'running') || running[0];
 
-      const primary = running[0];
+      this.activeLabel = running.length === 1
+        ? (primary.id ? `Job #${primary.id}` : '')
+        : `${running.length} jobs`;
 
       // Hash type
       if (primary.hash_type_name) this.hashTypeName = primary.hash_type_name;

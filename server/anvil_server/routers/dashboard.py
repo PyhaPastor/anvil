@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
@@ -207,8 +207,18 @@ async def dashboard_live(
     else:
         user = None  # presentation context — no credentials shown
 
+    # Sort so RUNNING jobs come before QUEUED ones, then by most-recently-started.
+    # Without this, a multi-job batch returns siblings in DB-storage order and the
+    # dashboard's "primary" job (running[0] in the template) can land on a still-
+    # queued sibling — showing the wrong wordlist, 0% progress, and no candidate.
     running = (await db.execute(
-        select(Job).where(Job.status.in_([JobStatus.RUNNING, JobStatus.QUEUED]))
+        select(Job)
+        .where(Job.status.in_([JobStatus.RUNNING, JobStatus.QUEUED]))
+        .order_by(
+            case((Job.status == JobStatus.RUNNING, 0), else_=1),
+            Job.started_at.desc().nullslast(),
+            Job.id.asc(),
+        )
     )).scalars().all()
 
     # Bulk-fetch wordlist names for running jobs
