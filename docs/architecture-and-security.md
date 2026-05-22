@@ -261,7 +261,7 @@ This is the most security-sensitive subsystem because it executes user-influence
 - **Mode whitelist.** `attack_mode` is a Python `Enum` (`AttackMode`), not a free-form string.
 - **Hash type.** `hash_type` is constrained to the integer modes defined in [hashcat_modes.py](../server/anvil_server/hashcat_modes.py).
 - **Environment sanitisation.** As above — `LD_PRELOAD`/`LD_AUDIT` and the dangerous `PYTHON*` vars are stripped from the subprocess env so hashcat cannot be coerced into loading attacker-controlled shared objects via inherited env.
-- **Output capture.** Cracked hashes are written by hashcat to an outfile inside the agent's workdir (`--outfile=…/job_<id>.potfile`, `--outfile-format=2`). The wrapper parses this file after the process exits and submits results back over HTTPS — there is no shell parsing of stdout.
+- **Output capture.** Cracked hashes are written by hashcat to an outfile inside the agent's workdir (`--outfile=…/job_<id>.potfile`, `--outfile-format=1,3` — `hash[:salt]:hex_plain`, using hashcat 6.x composable format codes). The wrapper parses this file after the process exits, hex-decodes each plaintext, normalises the hash field to match the server's stored `Hash.hash_value`, and submits results back over HTTPS — there is no shell parsing of stdout.
 - **Hashcat exit code mapping.** Codes 0/1 → completed/exhausted; 3 → aborted; anything else → error with stderr captured to the audit/log path. This prevents hashcat returning a "success" status on bad-args/file-not-found ([hashcat_wrapper.py:217-227](../agent/anvil_agent/hashcat_wrapper.py#L217-L227)).
 
 ---

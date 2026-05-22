@@ -21,8 +21,6 @@ logger = logging.getLogger("anvil.agent.hashcat")
 
 # Hashcat --machine-readable --status-json progress line pattern
 _STATUS_JSON_RE = re.compile(r"^\{.*\"status\".*\}$")
-# Hashcat cracked line: hash:plaintext or user:hash:plaintext
-_CRACKED_RE = re.compile(r"^(.+?):(.+)$")
 
 
 @dataclass
@@ -258,7 +256,14 @@ class HashcatWrapper:
             "--quiet",
             "--potfile-disable",         # we manage cracked output ourselves
             f"--outfile={outfile}",
-            "--outfile-format=2",        # hash:plain
+            # hashcat 6.x outfile-format codes (composable, comma-separated):
+            #   1=hash[:salt]  2=plain  3=hex_plain  4=crack_pos
+            #   5=timestamp_absolute  6=timestamp_relative
+            # We use "1,3" to get "hash[:salt]:hex_plain". The trailing hex field
+            # is unambiguous even when the hash itself contains ':' (NetNTLMv2)
+            # or the password contains ':'.  NOTE: in hashcat ≤5.x format=5 was
+            # the composite hash:hex_plain — in 6.x that became timestamp.
+            "--outfile-format=1,3",
         ]
 
         # No GPU found — restrict hashcat to OpenCL CPU devices (type 1).
@@ -485,22 +490,54 @@ class HashcatWrapper:
         )
 
     @staticmethod
+    def _normalize_hash_value(hash_part: str) -> str:
+        # Mirror server-side ingestion (jobs.py::_parse_and_store): when a line
+        # is "<prefix>:<rest>" and <prefix> is not a $-tagged hash, the server
+        # stores only <rest> as hash_value. Match cracks back to that exact form.
+        parts = hash_part.split(":", 1)
+        if len(parts) == 2 and not parts[0].startswith("$"):
+            return parts[1]
+        return hash_part
+
+    @staticmethod
     def _parse_outfile(outfile: Path) -> List[CrackResult]:
         if not outfile.exists():
+            logger.warning("hashcat outfile does not exist: %s", outfile)
             return []
-        results = []
+        try:
+            size = outfile.stat().st_size
+        except OSError:
+            size = -1
+        logger.debug("Parsing hashcat outfile: %s (size=%d bytes)", outfile, size)
+        results: List[CrackResult] = []
+        line_count = 0
         try:
             with open(outfile, encoding="utf-8", errors="replace") as f:
                 for line in f:
-                    line = line.rstrip("\n")
-                    m = _CRACKED_RE.match(line)
-                    if m:
-                        results.append(CrackResult(
-                            hash_value=m.group(1),
-                            plaintext=m.group(2),
-                        ))
-        except OSError:
-            pass
+                    line_count += 1
+                    line = line.rstrip("\r\n")
+                    if not line:
+                        continue
+                    # outfile-format=1,3: hash[:salt]:hex_plain
+                    idx = line.rfind(":")
+                    if idx < 0:
+                        logger.warning("hashcat outfile line has no separator: %r", line[:200])
+                        continue
+                    hash_part = line[:idx]
+                    hex_plain = line[idx + 1:]
+                    try:
+                        plaintext = bytes.fromhex(hex_plain).decode("utf-8", errors="replace")
+                    except ValueError:
+                        logger.warning("hashcat outfile line has non-hex plaintext: %r", line[:200])
+                        continue
+                    results.append(CrackResult(
+                        hash_value=HashcatWrapper._normalize_hash_value(hash_part),
+                        plaintext=plaintext,
+                    ))
+        except OSError as exc:
+            logger.warning("Failed to read hashcat outfile %s: %s", outfile, exc)
+        logger.debug("Parsed hashcat outfile: %d lines read, %d crack results extracted",
+                     line_count, len(results))
         return results
 
     @staticmethod
