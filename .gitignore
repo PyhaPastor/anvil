@@ -27,6 +27,7 @@ to do.txt
 .claude/settings.local.json
 .vscode/
 .idea/
+CLAUDE.md
 
 # Python
 __pycache__/
