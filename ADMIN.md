@@ -139,7 +139,7 @@ poll_interval = 5                    # Seconds between job polls
 
 [hashcat]
 bin     = "hashcat"                  # Path to hashcat binary
-workdir = "/opt/anvil/agent/workdir" # Must be on a persistent, fast disk
+workdir = "/var/lib/anvil-agent/workdir" # Must be on a persistent, fast disk
 
 [logging]
 level        = "INFO"
@@ -151,7 +151,7 @@ backup_count = 5
 sample_interval = 2                  # GPU/CPU sampling interval in seconds
 ```
 
-**Important:** `workdir` is where wordlist cache and hash files are stored. Ensure this path is on a disk with sufficient space and is NOT a tmpfs/ramdisk (data would be lost on reboot). Default after setup: `/opt/anvil/agent/workdir`.
+**Important:** `workdir` is where wordlist cache and hash files are stored. Ensure this path is on a disk with sufficient space and is NOT a tmpfs/ramdisk (data would be lost on reboot). Default after setup: `/var/lib/anvil-agent/workdir`. A `/tmp` path is rejected at load time and silently redirected to the default (see `agent/anvil_agent/config.py`).
 
 ---
 

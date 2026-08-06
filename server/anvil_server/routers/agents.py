@@ -184,6 +184,7 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/anvil/agent"
 CERTS_DIR="/opt/anvil/agent/certs"
+DATA_DIR="/var/lib/anvil-agent"
 SERVICE="anvil-agent"
 SERVER="{server_url}"
 
@@ -240,7 +241,8 @@ ca_bundle   = "/opt/anvil/agent/certs/anvil.crt"
 [hashcat]
 binary       = "/usr/bin/hashcat"
 extra_flags  = ""
-workdir      = "/tmp/anvil-hashcat"
+# Persistent — the wordlist cache must survive reboots. Never use /tmp.
+workdir      = "/var/lib/anvil-agent/workdir"
 potfile      = ""
 cpu_fallback = true
 
@@ -272,6 +274,11 @@ fi
 # ── 4. Fix ownership ─────────────────────────────────────────────────────────────
 echo "[4/5] Setting file ownership ..."
 chown -R "$SERVICE:$SERVICE" "$INSTALL_DIR" 2>/dev/null || true
+# Persistent data dir — may be absent if the agent was installed by an older
+# setup.sh that kept the workdir under $INSTALL_DIR.
+mkdir -p "$DATA_DIR/workdir/cache/wordlists" "$DATA_DIR/workdir/cache/rules"
+chown -R "$SERVICE:$SERVICE" "$DATA_DIR" 2>/dev/null || true
+chmod 750 "$DATA_DIR"
 
 # ── 5. Start service ─────────────────────────────────────────────────────────────
 echo "[5/5] Starting $SERVICE ..."
@@ -439,7 +446,8 @@ ca_bundle   = "/opt/anvil/agent/certs/anvil.crt"
 [hashcat]
 binary               = "$HASHCAT_BIN"
 extra_flags          = ""
-workdir              = "/tmp/anvil-hashcat"
+# Persistent — the wordlist cache must survive reboots. Never use /tmp.
+workdir              = "/var/lib/anvil-agent/workdir"
 potfile              = ""
 cpu_fallback         = true
 # Uncomment on GPU machines without CUDA SDK (driver-only / OpenCL install):
