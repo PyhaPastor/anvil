@@ -49,6 +49,11 @@ class Job(Base):
         Integer, ForeignKey("job_templates.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Shared id for jobs created together as a "batch" (one job per wordlist over
+    # the same hash set). NULL for standalone jobs. Lets the dashboard roll a
+    # batch up into a single operation with a deduplicated cracked/total count.
+    batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+
     status: Mapped[JobStatus] = mapped_column(
         Enum(JobStatus), nullable=False, default=JobStatus.PENDING, index=True
     )

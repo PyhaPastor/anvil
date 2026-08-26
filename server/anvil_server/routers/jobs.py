@@ -1,6 +1,7 @@
 """Jobs router — create, view, manage cracking jobs."""
 from __future__ import annotations
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -252,6 +253,11 @@ async def create_job(
         file_unique, parsed = _parse_and_store(existing_hl.file_path)
         existing_parsed.append((existing_hl.file_path, existing_hl.name, file_unique, parsed))
 
+    # Jobs created from a multi-wordlist batch share a batch_id so the dashboard
+    # can roll them up into one operation. Standalone (single-wordlist) jobs get
+    # no batch_id.
+    batch_id = uuid.uuid4().hex if batch_ids else None
+
     first_job_id = None
     for slot_idx, (wl_id, wl_label) in enumerate(wordlist_slots):
         job_name = f"{name} [{wl_label}]" if wl_label else name
@@ -270,6 +276,7 @@ async def create_job(
             extra_flags=extra_flags or None,
             priority=priority,
             total_hashes=0,
+            batch_id=batch_id,
             status=JobStatus.QUEUED if agent_id else JobStatus.PENDING,
         )
         db.add(job)

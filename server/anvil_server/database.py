@@ -58,6 +58,9 @@ async def _migrate(conn) -> None:
         "ALTER TABLE jobs ADD COLUMN phase VARCHAR(32)",
         # session 7: absolute passwords-tested counter persisted from agent
         "ALTER TABLE jobs ADD COLUMN keys_tried INTEGER",
+        # session 8: batch grouping for multi-wordlist jobs
+        "ALTER TABLE jobs ADD COLUMN batch_id VARCHAR(36)",
+        "CREATE INDEX ix_jobs_batch_id ON jobs (batch_id)",
     ]
     for stmt in migrations:
         try:

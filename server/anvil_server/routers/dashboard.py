@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import case, func, select
+from sqlalchemy import case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
@@ -265,6 +265,34 @@ async def dashboard_live(
         .limit(3)
     )).scalars().all()
 
+    # Batch rollups — for jobs created as a multi-wordlist batch (one job per
+    # wordlist over the same hash set), the live counter must reflect the WHOLE
+    # batch, including siblings that already completed, and must count the shared
+    # hash set once rather than once per wordlist. Compute a deduplicated
+    # cracked/total per batch across ALL sibling jobs regardless of status.
+    from ..models.hash_list import HashList, Hash
+    batch_ids = {j.batch_id for j in (*running, *recently_done) if j.batch_id}
+    batch_rollups: dict[str, dict] = {}
+    if batch_ids:
+        b_rows = (await db.execute(
+            select(
+                Job.batch_id,
+                func.count(distinct(Hash.hash_value)).label("total"),
+                func.count(distinct(
+                    case((Hash.plaintext.isnot(None), Hash.hash_value))
+                )).label("cracked"),
+            )
+            .select_from(Job)
+            .join(HashList, HashList.job_id == Job.id)
+            .join(Hash, Hash.hash_list_id == HashList.id)
+            .where(Job.batch_id.in_(batch_ids))
+            .group_by(Job.batch_id)
+        )).all()
+        batch_rollups = {
+            r.batch_id: {"cracked": r.cracked or 0, "total": r.total or 0}
+            for r in b_rows
+        }
+
     return JSONResponse({
         "total_jobs": total_jobs,
         "running_jobs": running_count,
@@ -285,6 +313,9 @@ async def dashboard_live(
                 "hashrate": j.hashrate or 0,
                 "cracked_count": j.cracked_count,
                 "total_hashes": j.total_hashes,
+                "batch_id": j.batch_id,
+                "batch_cracked": batch_rollups.get(j.batch_id, {}).get("cracked") if j.batch_id else None,
+                "batch_total": batch_rollups.get(j.batch_id, {}).get("total") if j.batch_id else None,
                 "eta_seconds": j.eta_seconds,
                 "current_candidate": ws_manager.get_candidate(j.id),
                 "keys_tried": j.keys_tried or ws_manager.get_keys_tried(j.id),
@@ -308,6 +339,9 @@ async def dashboard_live(
                 "status": j.status.value,
                 "cracked_count": j.cracked_count or 0,
                 "total_hashes": j.total_hashes or 0,
+                "batch_id": j.batch_id,
+                "batch_cracked": batch_rollups.get(j.batch_id, {}).get("cracked") if j.batch_id else None,
+                "batch_total": batch_rollups.get(j.batch_id, {}).get("total") if j.batch_id else None,
             }
             for j in recently_done
         ],

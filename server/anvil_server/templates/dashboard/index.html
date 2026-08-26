@@ -719,11 +719,12 @@ function commandCenter() {
 
       window.addEventListener('cc-completed', (e) => {
         const { job, hasMore } = e.detail;
+        const isBatch = job.batch_id && job.batch_total != null;
         this.completionState = {
           status: job.status,
           name: job.name,
-          cracked: job.cracked_count || 0,
-          total: job.total_hashes || 0,
+          cracked: isBatch ? (job.batch_cracked || 0) : (job.cracked_count || 0),
+          total:   isBatch ? (job.batch_total   || 0) : (job.total_hashes  || 0),
           elapsed: this.elapsed,
           peakSpeed: this._peakHashrate >= 1 ? this._fmtSpeedStr(this._peakHashrate) : null,
           hasMore,
@@ -829,9 +830,20 @@ function commandCenter() {
                      : primary.phase === 'cracking'    ? 'Cracking…'
                      : (primary.phase || '');
 
-      // Cracked counter — flash on new crack
-      const newCracked = running.reduce((s, j) => s + (j.cracked_count || 0), 0);
-      const newTotal   = running.reduce((s, j) => s + (j.total_hashes  || 0), 0);
+      // Cracked counter — flash on new crack.
+      // A batch (one job per wordlist over a shared hash set) reports a
+      // server-side rollup deduplicated across ALL siblings — including ones
+      // that already completed — so a crack from a finished wordlist stays
+      // counted and the shared hash set is counted once, not once per wordlist.
+      // Standalone jobs (or genuinely separate concurrent jobs) still sum.
+      let newCracked, newTotal;
+      if (primary.batch_id && primary.batch_total != null) {
+        newCracked = primary.batch_cracked || 0;
+        newTotal   = primary.batch_total   || 0;
+      } else {
+        newCracked = running.reduce((s, j) => s + (j.cracked_count || 0), 0);
+        newTotal   = running.reduce((s, j) => s + (j.total_hashes  || 0), 0);
+      }
       if (newCracked > this._prevCracked) {
         this.crackedFlash = true;
         setTimeout(() => { this.crackedFlash = false; }, 1800);
