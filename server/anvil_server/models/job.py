@@ -81,6 +81,11 @@ class Job(Base):
     eta_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     keys_tried: Mapped[int | None] = mapped_column(Integer, nullable=True)  # absolute passwords tested
     phase: Mapped[str | None] = mapped_column(String(32), nullable=True)  # downloading | cracking
+    # Wall-clock time the agent last pushed a progress update. Lets the dashboard
+    # tell "live" from "stalled" — a running job whose feed has frozen (hung
+    # hashcat, dead/offline agent) keeps its last progress values but stops
+    # advancing this timestamp, so the UI can stop faking forward motion.
+    progress_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Results summary
     total_hashes: Mapped[int] = mapped_column(Integer, default=0)

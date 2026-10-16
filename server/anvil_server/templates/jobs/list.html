@@ -82,7 +82,7 @@
             {{ job.agent.name if job.agent else '—' }}
           </td>
           <td class="py-3 text-xs text-zinc-500">
-            {{ job.created_at.strftime('%Y-%m-%d %H:%M') }}
+            {{ job.created_at | localdt }}
           </td>
           <td class="py-3">
             <div class="flex items-center gap-2">

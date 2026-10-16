@@ -75,6 +75,20 @@
     </svg>
     <p class="text-sm text-amber-300">TLS mode is set to "provided" — manage your certificate externally.</p>
   </div>
+  {% elif msg == 'tz_saved' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="text-sm text-emerald-300">Display timezone saved. Timestamps update on next page load.</p>
+  </div>
+  {% elif msg == 'tz_bad' %}
+  <div class="flex items-start gap-3 px-4 py-3 bg-red-500/10 border border-red-500/25 rounded-lg">
+    <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <p class="text-sm text-red-300">Invalid timezone: <code class="font-mono">{{ request.query_params.get('bad', '') }}</code></p>
+  </div>
   {% endif %}
 
   <!-- TLS Certificate -->
@@ -299,6 +313,35 @@
     </form>
   </div>
   {% endif %}
+
+  <!-- Display timezone -->
+  <div class="card space-y-3">
+    <div class="flex items-start gap-3">
+      <div>
+        <p class="font-semibold text-body">Display Timezone</p>
+        <p class="text-sm text-dim mt-0.5">All timestamps (jobs, agents, audit log, uploads) are stored in UTC and rendered in this timezone across the dashboard, including the kiosk view. Applies to every viewer.</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/timezone" class="space-y-3">
+      <div>
+        <label class="label text-sm">Timezone</label>
+        <select name="display_timezone" class="select w-full mt-1">
+          {% for tz in timezones %}
+          <option value="{{ tz }}" {% if tz == display_timezone %}selected{% endif %}>{{ tz }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center justify-between pt-1 border-t border-theme">
+        <p class="text-xs text-dimmer">Currently: <code class="font-mono text-body">{{ display_timezone }}</code> — updates on next page load.</p>
+        <button type="submit" class="btn-save">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          Save timezone
+        </button>
+      </div>
+    </form>
+  </div>
 
   <!-- Install command -->
   <div class="card space-y-3">

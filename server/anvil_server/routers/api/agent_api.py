@@ -191,6 +191,15 @@ async def heartbeat(
                 job.eta_seconds = payload.eta_seconds
             if payload.phase is not None:
                 job.phase = payload.phase
+            # Mark the feed fresh only when this heartbeat carries real crack
+            # progress. The periodic hardware heartbeat (main._heartbeat_loop)
+            # always sends a *stale* hashrate_hs — the last value the job runner
+            # pushed — but never a progress_pct, so a hung hashcat would keep
+            # refreshing this timestamp off that stale hashrate and defeat the
+            # dashboard's stall detection. progress_pct only arrives on the
+            # runner's per-status-line path, so gate on it.
+            if payload.progress_pct is not None:
+                job.progress_updated_at = datetime.utcnow()
             if payload.current_candidate:
                 ws_manager.set_candidate(job.id, payload.current_candidate)
             # Broadcast live progress to browser clients
@@ -358,6 +367,7 @@ async def submit_job_result(
     job.error_message = payload.error_message
     job.phase = None  # clear activity phase on completion
     ws_manager.clear_candidate(job.id)
+    ws_manager.clear_recovered(job.id)
 
     if payload.cracked:
         hash_lists = (await db.execute(

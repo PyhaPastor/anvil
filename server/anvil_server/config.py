@@ -19,6 +19,37 @@ class ServerConfig(BaseModel):
     # IPs/CIDRs that bypass login for /dashboard and are forced into presentation mode.
     # Empty list = kiosk mode disabled (default).
     kiosk_allowlist: List[str] = []
+    # IANA timezone used to render all stored (naive-UTC) timestamps in the UI.
+    # Editable from the dashboard Settings page. "UTC" keeps the raw stored value.
+    display_timezone: str = "UTC"
+
+    @field_validator("display_timezone")
+    @classmethod
+    def valid_timezone(cls, v: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        v = (v or "UTC").strip() or "UTC"
+        try:
+            ZoneInfo(v)
+            return v
+        except (ZoneInfoNotFoundError, ValueError, ModuleNotFoundError):
+            pass
+        # Distinguish "no tz database at all" (e.g. Windows without the tzdata
+        # package) from "db present but this zone is unknown". In the former
+        # case we must not crash startup — accept the value with a warning; the
+        # localdt filter falls back to UTC rendering when it can't resolve it.
+        try:
+            ZoneInfo("UTC")
+        except Exception:
+            import logging
+            logging.getLogger("anvil.config").warning(
+                "No IANA timezone database found — install the 'tzdata' package "
+                "for display_timezone support. Timestamps will render in UTC."
+            )
+            return v
+        raise ValueError(
+            f"display_timezone '{v}' is not a valid IANA timezone "
+            "(e.g. 'UTC', 'Europe/Tallinn', 'America/New_York')"
+        )
 
     @field_validator("secret_key")
     @classmethod

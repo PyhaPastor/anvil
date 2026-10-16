@@ -21,6 +21,9 @@ class ConnectionManager:
         self._job_candidates: Dict[int, str] = {}
         # job_id -> most recent absolute keys_tried count from hashcat
         self._keys_tried: Dict[int, int] = {}
+        # job_id -> most recent live recovered-hashes count from hashcat status.
+        # In-memory only; the authoritative cracked_count is persisted at job end.
+        self._recovered: Dict[int, int] = {}
         # job_id -> download progress snapshot
         self._download_progress: Dict[int, dict] = {}
         # (agent_id, wordlist_id) -> preload progress snapshot
@@ -79,6 +82,19 @@ class ConnectionManager:
 
     def clear_keys_tried(self, job_id: int) -> None:
         self._keys_tried.pop(job_id, None)
+
+    # ------------------------------------------------------------------
+    # Live recovered (cracked) count cache
+    # ------------------------------------------------------------------
+
+    def set_recovered(self, job_id: int, count: int) -> None:
+        self._recovered[job_id] = count
+
+    def get_recovered(self, job_id: int) -> int:
+        return self._recovered.get(job_id, 0)
+
+    def clear_recovered(self, job_id: int) -> None:
+        self._recovered.pop(job_id, None)
 
     # ------------------------------------------------------------------
     # Download progress cache

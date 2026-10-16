@@ -90,6 +90,11 @@ class JobRunner:
                     "hashrate_hs": event.hashrate_hs,
                     "eta_seconds": event.eta_seconds,
                     "keys_tried": event.keys_tried,
+                    # Live cracked count from hashcat's status (recovered_hashes).
+                    # Lets the dashboard show the count rising during the run; the
+                    # authoritative deduplicated count still settles at job end.
+                    "recovered": event.recovered,
+                    "total_hashes": event.total,
                     "gpu_temp_c": gpu.temp_c if gpu else None,
                     "gpu_util_pct": gpu.util_pct if gpu else None,
                     "current_candidate": event.current_candidate,

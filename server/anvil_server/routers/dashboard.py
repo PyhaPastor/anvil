@@ -293,6 +293,22 @@ async def dashboard_live(
             for r in b_rows
         }
 
+        # Fold in LIVE recovered counts from still-running batch siblings. Their
+        # cracks aren't in the DB yet (persisted only at job end), so without
+        # this the batch counter reads 0 while a wordlist is actively cracking.
+        # Cap at the batch total so an approximate live count never exceeds 100%.
+        live_by_batch: dict[str, int] = {}
+        for j in running:
+            if j.batch_id:
+                live_by_batch[j.batch_id] = (
+                    live_by_batch.get(j.batch_id, 0) + ws_manager.get_recovered(j.id)
+                )
+        for bid, add in live_by_batch.items():
+            roll = batch_rollups.get(bid)
+            if roll and add:
+                combined = roll["cracked"] + add
+                roll["cracked"] = min(combined, roll["total"]) if roll["total"] else combined
+
     return JSONResponse({
         "total_jobs": total_jobs,
         "running_jobs": running_count,
@@ -311,7 +327,9 @@ async def dashboard_live(
                 "phase": j.phase,
                 "progress_pct": round(j.progress_pct, 1),
                 "hashrate": j.hashrate or 0,
-                "cracked_count": j.cracked_count,
+                # Live cracked count: the DB value is 0 until the job ends, so
+                # fall back to the live recovered count streamed by the agent.
+                "cracked_count": max(j.cracked_count or 0, ws_manager.get_recovered(j.id)),
                 "total_hashes": j.total_hashes,
                 "batch_id": j.batch_id,
                 "batch_cracked": batch_rollups.get(j.batch_id, {}).get("cracked") if j.batch_id else None,
@@ -321,6 +339,7 @@ async def dashboard_live(
                 "keys_tried": j.keys_tried or ws_manager.get_keys_tried(j.id),
                 "hash_type_name": j.hash_type_name or (f"#{j.hash_type}" if j.hash_type else "Unknown"),
                 "started_at_ts": j.started_at.replace(tzinfo=timezone.utc).timestamp() if j.started_at else None,
+                "progress_updated_at_ts": j.progress_updated_at.replace(tzinfo=timezone.utc).timestamp() if j.progress_updated_at else None,
                 "wordlist_name": wordlist_names.get(j.wordlist_id) if j.wordlist_id else None,
                 "rule_names": [rule_names[rid] for rid in (j.rules_json or []) if rid in rule_names],
                 "download_progress": (

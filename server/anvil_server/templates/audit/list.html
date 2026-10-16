@@ -37,7 +37,7 @@
       <tbody class="divide-y divide-zinc-800/50 font-mono text-xs">
         {% for e in entries %}
         <tr class="hover:bg-zinc-800/30">
-          <td class="py-2 pr-4 text-zinc-500 whitespace-nowrap">{{ e.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td class="py-2 pr-4 text-zinc-500 whitespace-nowrap">{{ e.timestamp | localdt('datetime-sec') }}</td>
           <td class="py-2 pr-4 text-zinc-300">{{ e.user.username if e.user else '—' }}</td>
           <td class="py-2 pr-4">
             <span class="px-1.5 py-0.5 rounded text-xs

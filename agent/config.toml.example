@@ -28,6 +28,14 @@ potfile = ""
 # Restrict OpenCL device types: "1"=CPU, "2"=GPU, "4"=all
 # Uncomment on GPU machines to force GPU selection
 # opencl_device_types = "2"
+# Stall watchdog: if hashcat stops emitting status output for this many seconds
+# *after cracking has started*, treat it as hung, kill it, and fail the job
+# (prevents a frozen run from showing stuck progress forever). 0 disables.
+stall_timeout_seconds = 120
+# Separate, generous grace period BEFORE the first status line. Big jobs spend
+# minutes here building the dictionary cache / autotuning with no output, so
+# keep this large or real jobs get killed at startup. 0 disables.
+warmup_timeout_seconds = 1800
 
 [hardware]
 # GPU/CPU monitoring sample interval (seconds)

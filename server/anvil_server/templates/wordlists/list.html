@@ -261,7 +261,7 @@
           <td class="py-2.5 pr-4 text-zinc-500 text-xs">{{ wl.category or '—' }}</td>
           <td class="py-2.5 pr-4 text-zinc-400 text-xs">{{ "{:,}".format(wl.line_count) }}</td>
           <td class="py-2.5 pr-4 text-zinc-500 text-xs">{{ "%.1f"|format(wl.file_size_bytes/1048576) }} MB</td>
-          <td class="py-2.5 pr-4 text-xs text-zinc-500">{{ wl.uploaded_at.strftime('%Y-%m-%d') }}</td>
+          <td class="py-2.5 pr-4 text-xs text-zinc-500">{{ wl.uploaded_at | localdt('date') }}</td>
           <td class="py-2.5">
             <div class="flex items-center gap-2">
               <button type="button"
@@ -423,7 +423,7 @@
         <tr class="hover:bg-zinc-800/40">
           <td class="py-2.5 pr-4 font-medium text-zinc-100">{{ r.name }}</td>
           <td class="py-2.5 pr-4 text-zinc-500 text-sm">{{ r.description or '—' }}</td>
-          <td class="py-2.5 pr-4 text-xs text-zinc-500">{{ r.uploaded_at.strftime('%Y-%m-%d') }}</td>
+          <td class="py-2.5 pr-4 text-xs text-zinc-500">{{ r.uploaded_at | localdt('date') }}</td>
           <td class="py-2.5 text-xs text-zinc-600">—</td>
         </tr>
         {% endfor %}

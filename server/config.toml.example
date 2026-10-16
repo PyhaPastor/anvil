@@ -8,6 +8,9 @@ debug = false
 # Generate with: python3 -c "import secrets; print(secrets.token_hex(64))"
 secret_key      = "CHANGE_ME_BEFORE_FIRST_RUN"
 session_max_age = 28800
+# IANA timezone for rendering timestamps in the UI (stored values are UTC).
+# Also editable from the dashboard Settings page. e.g. "Europe/Tallinn".
+display_timezone = "UTC"
 
 [database]
 # SQLite (default — zero ops, file-based)

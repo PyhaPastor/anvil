@@ -60,7 +60,7 @@
             {% endif %}
           </td>
           <td class="py-3 pr-4 text-xs text-dimmer tabular-nums">
-            {{ a.last_seen.strftime('%Y-%m-%d %H:%M') if a.last_seen else 'Never' }}
+            {{ a.last_seen | localdt('datetime', 'Never') }}
           </td>
           <td class="py-3 pr-4 text-xs text-dim">
             {% if a.capabilities %}

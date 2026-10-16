@@ -1,6 +1,7 @@
 """WebSocket router — browser clients subscribe to live job progress."""
 from __future__ import annotations
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -104,6 +105,7 @@ async def agent_ws(agent_id: int, websocket: WebSocket):
                                     job.keys_tried = int(data["keys_tried"])
                                 if data.get("phase"):
                                     job.phase = data["phase"]
+                                job.progress_updated_at = datetime.utcnow()
                                 await db.commit()
                     except Exception:
                         logger.exception("Failed to persist progress for job %s", data.get("job_id"))
@@ -111,6 +113,10 @@ async def agent_ws(agent_id: int, websocket: WebSocket):
                     ws_manager.set_candidate(data["job_id"], data["current_candidate"])
                 if data.get("keys_tried"):
                     ws_manager.set_keys_tried(data["job_id"], int(data["keys_tried"]))
+                # Live cracked count (recovered_hashes) — shown on the dashboard
+                # while the job runs; authoritative count is persisted at job end.
+                if data.get("recovered") is not None:
+                    ws_manager.set_recovered(data["job_id"], int(data["recovered"]))
                 # Clear download progress once cracking begins
                 if data.get("phase") == "cracking":
                     ws_manager.clear_download_progress(data["job_id"])

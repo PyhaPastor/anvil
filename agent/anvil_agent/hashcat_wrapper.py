@@ -46,9 +46,16 @@ class ProgressEvent:
 
 
 class HashcatWrapper:
+    # How long readline() waits before we re-check the stall watchdog. While
+    # cracking, status lines arrive ~1/s so this timeout is never hit; it only
+    # governs how promptly we notice silence.
+    _READ_POLL = 15
+
     def __init__(self) -> None:
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._cancelled = False
+        self._stalled = False
+        self._stall_error: Optional[str] = None
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -72,6 +79,8 @@ class HashcatWrapper:
         outfile_path: Path,
     ) -> AsyncIterator[ProgressEvent]:
         self._cancelled = False
+        self._stalled = False
+        self._stall_error = None
 
         # Resolve binary
         binary = settings.hashcat.binary
@@ -181,7 +190,12 @@ class HashcatWrapper:
         stderr_task = asyncio.create_task(_drain_stderr())
 
         try:
-            async for event in self._stream_output(self._proc, started_at_ts):
+            async for event in self._stream_output(
+                self._proc,
+                started_at_ts,
+                warmup_timeout=settings.hashcat.warmup_timeout_seconds,
+                stall_timeout=settings.hashcat.stall_timeout_seconds,
+            ):
                 if self._cancelled:
                     self._proc.terminate()
                     await stderr_task
@@ -216,6 +230,12 @@ class HashcatWrapper:
         if self._cancelled:
             final_status = "aborted"
             error_msg = None
+        elif self._stalled:
+            # Watchdog killed a hung hashcat — surface it as a failure so the
+            # job stops showing frozen progress and the operator sees why.
+            final_status = "error"
+            error_msg = self._stall_error or "hashcat stalled — no status output"
+            logger.error("Job %d: %s", job_id, error_msg)
         elif rc in (0, 1):
             # 0 = cracked something, 1 = ran to exhaustion without cracking
             final_status = "exhausted" if rc == 1 else "completed"
@@ -378,16 +398,50 @@ class HashcatWrapper:
         return None
 
     async def _stream_output(
-        self, proc: asyncio.subprocess.Process, started_at_ts: float
+        self,
+        proc: asyncio.subprocess.Process,
+        started_at_ts: float,
+        warmup_timeout: float = 0,
+        stall_timeout: float = 0,
     ) -> AsyncIterator[ProgressEvent]:
         assert proc.stdout is not None
 
+        # Stall watchdog state. We measure silence from the last line hashcat
+        # emitted and apply two different limits:
+        #   • before the first status line  → warmup_timeout  (generous: a big
+        #     job spends minutes here building the dict cache / autotuning with
+        #     no output, which is NOT a hang)
+        #   • after the first status line    → stall_timeout   (tight: status
+        #     lines flow ~1/s, so prolonged silence means hashcat has hung)
+        # Either limit set to 0 disables that phase's watchdog.
+        last_output = time.monotonic()
+        first_status_seen = False
+
         while True:
             try:
-                line = await asyncio.wait_for(proc.stdout.readline(), timeout=30)
+                line = await asyncio.wait_for(
+                    proc.stdout.readline(), timeout=self._READ_POLL
+                )
             except asyncio.TimeoutError:
                 if proc.returncode is not None:
                     break
+                silence = time.monotonic() - last_output
+                limit = stall_timeout if first_status_seen else warmup_timeout
+                if limit and silence > limit:
+                    where = "while cracking" if first_status_seen else "during startup"
+                    msg = (
+                        f"hashcat produced no output for {int(silence)}s {where} "
+                        f"(limit {int(limit)}s) — treating as stalled and aborting"
+                    )
+                    logger.error(msg)
+                    self._stalled = True
+                    self._stall_error = msg
+                    if proc.returncode is None:
+                        try:
+                            proc.terminate()
+                        except ProcessLookupError:
+                            pass
+                    return
                 continue
 
             if not line:
@@ -395,6 +449,10 @@ class HashcatWrapper:
                     break
                 await asyncio.sleep(0.1)
                 continue
+
+            # Any line (even non-status chatter) proves hashcat is still alive,
+            # so it resets the silence clock.
+            last_output = time.monotonic()
 
             decoded = line.decode(errors="replace").strip()
             if not decoded:
@@ -405,6 +463,7 @@ class HashcatWrapper:
                 try:
                     data = json.loads(decoded)
                     logger.debug("hashcat JSON keys: %s", list(data.keys()))
+                    first_status_seen = True
                     yield self._parse_status_json(data, started_at_ts)
                 except json.JSONDecodeError as exc:
                     logger.warning("Failed to parse hashcat JSON: %s | line: %s", exc, decoded[:200])

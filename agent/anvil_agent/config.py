@@ -40,6 +40,25 @@ class HashcatConfig(BaseModel):
     # Set "2" on GPU machines to force GPU OpenCL selection and skip the probe.
     opencl_device_types: str = ""
 
+    # ── Stall watchdog (Bug 1) ────────────────────────────────────────────────
+    # A running crack with --status-timer=1 prints a status line every second.
+    # If that stream goes silent for longer than stall_timeout_seconds *after
+    # cracking has begun*, the agent treats hashcat as hung, kills it, and fails
+    # the job — instead of waiting forever while the dashboard shows frozen
+    # progress. 0 disables the running-stall watchdog.
+    stall_timeout_seconds: int = 120
+    # A separate, deliberately generous grace period that applies BEFORE the
+    # first status line arrives. Big jobs legitimately spend minutes here with
+    # no output (building the dictionary cache, autotuning the kernel), so this
+    # must stay large or real jobs get killed at startup. 0 disables the warmup
+    # watchdog (no limit until cracking actually starts).
+    warmup_timeout_seconds: int = 1800
+
+    @field_validator("stall_timeout_seconds", "warmup_timeout_seconds")
+    @classmethod
+    def non_negative_timeout(cls, v: int) -> int:
+        return max(v, 0)
+
     @field_validator("workdir")
     @classmethod
     def reject_volatile_workdir(cls, v: str) -> str:

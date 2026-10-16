@@ -57,7 +57,62 @@ async def settings_page(
         "kiosk_allowlist": settings.server.kiosk_allowlist,
         "agents": agents,
         "default_agent_id": settings.agent.default_agent_id,
+        "display_timezone": settings.server.display_timezone,
+        "timezones": _available_timezones(),
     })
+
+
+def _available_timezones() -> list[str]:
+    """Sorted IANA zone list for the settings dropdown (UTC pinned first)."""
+    try:
+        from zoneinfo import available_timezones
+        zones = sorted(available_timezones())
+    except Exception:
+        zones = []
+    rest = [z for z in zones if z != "UTC"]
+    return ["UTC"] + rest
+
+
+@router.post("/timezone")
+async def save_timezone(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    display_timezone: str = Form("UTC"),
+):
+    import re as _re
+    from zoneinfo import ZoneInfo
+
+    tz = (display_timezone or "UTC").strip() or "UTC"
+    try:
+        ZoneInfo(tz)
+    except Exception:
+        return RedirectResponse(f"/settings?msg=tz_bad&bad={tz}", status_code=302)
+
+    settings.server = settings.server.model_copy(update={"display_timezone": tz})
+
+    config_path = Path(CONFIG_PATH)
+    if config_path.exists():
+        content = config_path.read_text()
+        if _re.search(r"^display_timezone\s*=", content, _re.MULTILINE):
+            content = _re.sub(
+                r"^display_timezone\s*=.*$", f'display_timezone = "{tz}"',
+                content, flags=_re.MULTILINE,
+            )
+        elif _re.search(r"^\[server\]", content, _re.MULTILINE):
+            content = _re.sub(
+                r"(\[server\])", rf'\1\ndisplay_timezone = "{tz}"',
+                content, flags=_re.MULTILINE,
+            )
+        else:
+            content += f'\n[server]\ndisplay_timezone = "{tz}"\n'
+        config_path.write_text(content)
+
+    await audit_service.log_action(
+        db, "display_timezone_updated", user_id=user.id,
+        details={"display_timezone": tz},
+    )
+    return RedirectResponse("/settings?msg=tz_saved", status_code=302)
 
 
 @router.post("/kiosk-allowlist")

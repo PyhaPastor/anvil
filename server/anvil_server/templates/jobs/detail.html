@@ -118,9 +118,9 @@
         ('Hash type', job.hash_type_name or job.hash_type or 'Auto-detect'),
         ('Priority', job.priority),
         ('Agent', job.agent.name if job.agent else '—'),
-        ('Created', job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else '—'),
-        ('Started', job.started_at.strftime('%Y-%m-%d %H:%M') if job.started_at else '—'),
-        ('Completed', job.completed_at.strftime('%Y-%m-%d %H:%M') if job.completed_at else '—'),
+        ('Created', job.created_at | localdt),
+        ('Started', job.started_at | localdt),
+        ('Completed', job.completed_at | localdt),
         ('Duration', (job.duration_seconds|string + 's') if job.duration_seconds else '—'),
       ] %}
       {% for label, val in meta %}
@@ -198,7 +198,7 @@
             {% if h.username is not none %}<td class="py-2 pr-4 text-zinc-300">{{ h.username or '—' }}</td>{% endif %}
             <td class="py-2 pr-4 font-mono text-xs text-zinc-500 max-w-[180px] truncate" title="{{ h.hash_value }}">{{ h.hash_value[:32] }}{% if h.hash_value|length > 32 %}…{% endif %}</td>
             <td class="py-2 pr-4 font-mono text-green-300 font-medium">{{ h.plaintext }}</td>
-            <td class="py-2 text-xs text-zinc-500">{{ h.cracked_at.strftime('%H:%M:%S') if h.cracked_at else '—' }}</td>
+            <td class="py-2 text-xs text-zinc-500">{{ h.cracked_at | localdt('time') }}</td>
           </tr>
           {% endif %}
           {% endfor %}

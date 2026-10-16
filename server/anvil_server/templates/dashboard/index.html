@@ -163,7 +163,14 @@
 
         <!-- Hashrate -->
         <div>
-          <p class="text-[10px] font-semibold tracking-[0.18em] uppercase text-emerald-600 mb-1">Cracking Speed</p>
+          <div class="flex items-center gap-2 mb-1">
+            <p class="text-[10px] font-semibold tracking-[0.18em] uppercase text-emerald-600">Cracking Speed</p>
+            <!-- Stall warning: feed frozen, values below are the last-known, not live -->
+            <span x-show="stalled" x-cloak
+                  class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/40 animate-pulse">
+              ⚠ Stalled — no agent updates for <span x-text="_fmtEta(stalledSecs)"></span>
+            </span>
+          </div>
           <!-- Raw number (big) -->
           <div class="flex items-baseline gap-2">
             <span class="text-5xl font-black tabular-nums text-emerald-300 tracking-tight leading-none"
@@ -644,7 +651,7 @@
             </td>
             {% endif %}
             <td class="py-3 text-dimmer text-xs tabular-nums">
-              {{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else '—' }}
+              {{ job.created_at | localdt }}
             </td>
           </tr>
           {% endif %}
@@ -687,6 +694,8 @@ function commandCenter() {
     liveCracked: 0,
     liveTotal: 0,
     crackedFlash: false,
+    stalled: false,          // feed frozen: running job whose progress stopped advancing
+    stalledSecs: 0,          // how long the feed has been frozen (for the badge)
     gpuUtil: null,
     gpuTemp: null,
     gpuName: '',
@@ -713,6 +722,9 @@ function commandCenter() {
     _lastRealCandidate: 0,   // timestamp of last real candidate push
     _scanChars: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*',
     _scanLen: 8,             // length of generated scan string (updated from real candidates)
+    _lastProgressTs: null,   // last server progress_updated_at_ts seen (detect advancement)
+    _lastProgressChangeMs: 0,// client clock when that ts last changed
+    _STALE_MS: 30000,        // feed considered stalled after this long with no advance
 
     init() {
       window.addEventListener('cc-update', (e) => this.update(e.detail));
@@ -731,6 +743,8 @@ function commandCenter() {
         };
         this._hashrate = 0;
         this.scanLine = '';
+        this.stalled = false;
+        this.stalledSecs = 0;
       });
 
       // Smooth hashrate + GPU + elapsed — slower on kiosk/presentation to reduce CPU pressure
@@ -764,15 +778,18 @@ function commandCenter() {
         }
       }, _smoothInterval);
 
-      // Passwords tested ticker every second
+      // Passwords tested ticker every second. Only interpolates forward while the
+      // feed is live — when the agent's progress stream has frozen we must NOT keep
+      // inventing passwords off a stale hashrate, or a stalled job looks like it's
+      // still working. The per-poll sync in update() corrects back to ground truth.
       this._tickTimer = setInterval(() => {
-        if (this._hashrate > 0) this.passwordsTested += this._hashrate;
+        if (this._hashrate > 0 && !this.stalled) this.passwordsTested += this._hashrate;
       }, 1000);
 
       // Scanning animation — slower on kiosk to reduce CPU pressure
       if (!this._isKiosk) {
         this._scanTimer = setInterval(() => {
-          if (this._hashrate < 1) return;
+          if (this._hashrate < 1 || this.stalled) return;
           let s = '';
           for (let i = 0; i < this._scanLen; i++)
             s += this._scanChars[Math.floor(Math.random() * this._scanChars.length)];
@@ -792,6 +809,10 @@ function commandCenter() {
         this._peakHashrate = 0;
         this.passwordsTested = 0;
         this._startedAt = null;
+        this.stalled = false;
+        this.stalledSecs = 0;
+        this._lastProgressTs = null;
+        this._lastProgressChangeMs = 0;
       }
 
       // Prefer an actually-running sibling for primary-derived fields (wordlist,
@@ -815,9 +836,34 @@ function commandCenter() {
       this._hashrate = running.reduce((s, j) => s + (j.hashrate || 0), 0);
       if (this._hashrate > this._peakHashrate) this._peakHashrate = this._hashrate;
 
+      // ── Stall detection ────────────────────────────────────────────────────
+      // A running job whose agent/hashcat has hung keeps its last progress values
+      // forever. We detect this by watching whether the server's progress
+      // freshness timestamp actually ADVANCES — comparing the value to itself
+      // across polls, not browser-vs-server wall clocks, so clock skew is a
+      // non-issue. Only meaningful while actively cracking (downloads advance
+      // their own dlProgress feed, not this timestamp).
+      const pts = primary.progress_updated_at_ts || null;
+      const nowMs = Date.now();
+      if (pts !== this._lastProgressTs) {
+        // Timestamp advanced — feed is live.
+        this._lastProgressTs = pts;
+        this._lastProgressChangeMs = nowMs;
+      } else if (this._lastProgressChangeMs === 0) {
+        // First sighting of this job — baseline the clock even if the server
+        // hasn't populated the timestamp yet (legacy job predating the column),
+        // so a genuinely hung job still trips the stall guard after the window.
+        this._lastProgressChangeMs = nowMs;
+      }
+      const cracking = primary.status === 'running' && primary.phase !== 'downloading';
+      const frozenMs = this._lastProgressChangeMs ? (nowMs - this._lastProgressChangeMs) : 0;
+      this.stalled = cracking && frozenMs > this._STALE_MS;
+      this.stalledSecs = this.stalled ? Math.floor(frozenMs / 1000) : 0;
+
       // Sync passwordsTested from the authoritative backend value on every poll.
       // The per-second ticker interpolates between polls for smooth animation,
-      // but gets corrected back to ground truth each time the poll fires.
+      // but gets corrected back to ground truth each time the poll fires. When
+      // stalled, this holds it pinned to the real last-known count (ticker off).
       if (primary.keys_tried > 0) {
         this.passwordsTested = primary.keys_tried;
       }

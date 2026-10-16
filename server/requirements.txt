@@ -49,3 +49,6 @@ aiosmtplib>=3.0.0
 
 # System metrics
 psutil>=6.0.0
+
+# IANA timezone database (for display_timezone conversion; Windows/dev have no system tzdb)
+tzdata>=2024.1

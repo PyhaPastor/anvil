@@ -245,6 +245,10 @@ extra_flags  = ""
 workdir      = "/var/lib/anvil-agent/workdir"
 potfile      = ""
 cpu_fallback = true
+# Stall watchdog — abort a hung hashcat that stops emitting status output.
+# Defaults shown; uncomment to tune. warmup covers big-job startup (dict cache).
+# stall_timeout_seconds  = 120
+# warmup_timeout_seconds = 1800
 
 [hardware]
 sample_interval = 2
@@ -450,6 +454,10 @@ extra_flags          = ""
 workdir              = "/var/lib/anvil-agent/workdir"
 potfile              = ""
 cpu_fallback         = true
+# Stall watchdog — abort a hung hashcat that stops emitting status output.
+# Defaults shown; uncomment to tune. warmup covers big-job startup (dict cache).
+# stall_timeout_seconds  = 120
+# warmup_timeout_seconds = 1800
 # Uncomment on GPU machines without CUDA SDK (driver-only / OpenCL install):
 # opencl_device_types   = "2"
 

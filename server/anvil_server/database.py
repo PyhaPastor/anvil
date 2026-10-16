@@ -61,6 +61,8 @@ async def _migrate(conn) -> None:
         # session 8: batch grouping for multi-wordlist jobs
         "ALTER TABLE jobs ADD COLUMN batch_id VARCHAR(36)",
         "CREATE INDEX ix_jobs_batch_id ON jobs (batch_id)",
+        # session 9: freshness timestamp so the dashboard can detect a stalled feed
+        "ALTER TABLE jobs ADD COLUMN progress_updated_at DATETIME",
     ]
     for stmt in migrations:
         try:
