@@ -28,6 +28,8 @@ to do.txt
 .vscode/
 .idea/
 CLAUDE.md
+# Local bug scratchpad — not version controlled
+bugs.txt
 
 # Python
 __pycache__/
