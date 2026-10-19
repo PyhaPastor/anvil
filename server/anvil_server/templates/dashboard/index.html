@@ -786,16 +786,17 @@ function commandCenter() {
         if (this._hashrate > 0 && !this.stalled) this.passwordsTested += this._hashrate;
       }, 1000);
 
-      // Scanning animation — slower on kiosk to reduce CPU pressure
-      if (!this._isKiosk) {
-        this._scanTimer = setInterval(() => {
-          if (this._hashrate < 1 || this.stalled) return;
-          let s = '';
-          for (let i = 0; i < this._scanLen; i++)
-            s += this._scanChars[Math.floor(Math.random() * this._scanChars.length)];
-          this.scanLine = s;
-        }, 120);
-      }
+      // Scanning animation. Runs on the kiosk too (Bug 6: the "Currently
+      // Testing" panel was blank there after fetching, because this was disabled
+      // on kiosk and dictionary attacks expose no per-word candidate), just at a
+      // slower cadence to keep CPU pressure low on always-on displays.
+      this._scanTimer = setInterval(() => {
+        if (this._hashrate < 1 || this.stalled) return;
+        let s = '';
+        for (let i = 0; i < this._scanLen; i++)
+          s += this._scanChars[Math.floor(Math.random() * this._scanChars.length)];
+        this.scanLine = s;
+      }, this._isKiosk ? 360 : 120);
     },
 
     update(activeJobs) {
