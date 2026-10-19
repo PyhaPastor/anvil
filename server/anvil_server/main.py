@@ -201,6 +201,23 @@ def create_app() -> FastAPI:
     async def forbidden(request: Request, exc):
         return _templates.TemplateResponse(request, "errors/403.html", status_code=403)
 
+    @app.exception_handler(401)
+    async def unauthorized(request: Request, exc):
+        # A missing cookie already redirects to /login; a present-but-invalid or
+        # expired session token raises 401, which otherwise bubbled up as raw
+        # JSON. Bounce browser navigations to the login page (and drop the stale
+        # cookie) while keeping JSON for API/agent clients.
+        detail = getattr(exc, "detail", "Unauthorized")
+        accepts_html = "text/html" in request.headers.get("accept", "")
+        if accepts_html and not request.url.path.startswith("/api"):
+            resp = RedirectResponse(
+                "/login?error=Session+expired.+Please+log+in+again.",
+                status_code=302,
+            )
+            resp.delete_cookie("anvil_session")
+            return resp
+        return JSONResponse({"detail": detail}, status_code=401)
+
     @app.exception_handler(500)
     async def server_error(request: Request, exc):
         logger.exception("Unhandled server error: %s", exc)
