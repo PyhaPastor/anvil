@@ -21,7 +21,7 @@ from ..models.agent import Agent
 from ..models.user import User, UserRole
 from ..services.auth_service import get_current_user, require_analyst
 from ..services import audit_service, export_service
-from ..services.upload_service import save_upload
+from ..services.upload_service import save_upload, BUILTIN_HASHLIST_EXTENSIONS
 from ..services.ws_manager import ws_manager
 from ..config import settings
 from ..hashcat_modes import HASHCAT_MODES, FAVOURITE_MODES
@@ -219,8 +219,19 @@ async def create_job(
         wordlist_slots = [(wordlist_id, None)]
 
     def _parse_and_store(file_path: str) -> tuple[set[str], list[tuple]]:
-        with open(file_path, encoding="utf-8", errors="replace") as fh:
-            lines = [l.strip() for l in fh if l.strip()]
+        raw = Path(file_path).read_bytes()
+        # Reject binary capture files (.cap/.pcap/.hccapx) that slipped past the
+        # extension gate — they contain NUL bytes and can't be parsed as hashes.
+        if b"\x00" in raw:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=(
+                    "This looks like a binary capture file (.cap/.pcap/.hccapx), "
+                    "which isn't supported. Convert it to the hashcat .22000 text "
+                    "format first, e.g.: hcxpcapngtool -o capture.22000 capture.pcapng"
+                ),
+            )
+        lines = [l.strip() for l in raw.decode("utf-8", errors="replace").splitlines() if l.strip()]
         file_unique: set[str] = set()
         parsed: list[tuple[Optional[str], str]] = []
         for line in lines:
@@ -235,12 +246,17 @@ async def create_job(
 
     # Pre-save uploaded files once — reused across all batch jobs
     saved_uploads: list[tuple[str, set[str], list[tuple]]] = []
+    # Accept the configured hash-list extensions plus the built-in WPA/WiFi
+    # capture text formats (.22000 etc.), so those work without a config edit.
+    hashlist_exts = list(
+        set(settings.storage.allowed_hashlist_extensions) | BUILTIN_HASHLIST_EXTENSIONS
+    )
     for upload in valid_files:
         saved_path, _ = await save_upload(
             upload,
             settings.storage.hashlists_dir,
             max_bytes,
-            settings.storage.allowed_hashlist_extensions,
+            hashlist_exts,
         )
         file_unique, parsed = _parse_and_store(saved_path)
         saved_uploads.append((saved_path, file_unique, parsed))

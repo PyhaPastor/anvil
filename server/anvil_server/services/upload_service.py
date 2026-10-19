@@ -18,6 +18,16 @@ _ALLOWED_MIME = {
 
 _UNSAFE_FILENAME_RE = re.compile(r"[^\w\.\-]")
 
+# WPA/WiFi handshake hash formats in hashcat's text form, as produced by
+# hcxtools (hcxpcapngtool) on Kali / WiFi Pineapple captures. Always accepted
+# for hash-list uploads (unioned with the configured list) so these work out of
+# the box without every operator editing allowed_hashlist_extensions. Binary
+# capture files (.cap/.pcap/.hccapx) are intentionally excluded — they must be
+# converted to the .22000 text format first.
+BUILTIN_HASHLIST_EXTENSIONS: frozenset[str] = frozenset({
+    ".22000", ".hc22000", ".pmkid", ".16800",
+})
+
 
 def sanitise_filename(name: str) -> str:
     """Return a safe filename, stripping path traversal and special chars."""

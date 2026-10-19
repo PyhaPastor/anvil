@@ -93,7 +93,12 @@ class StorageConfig(BaseModel):
     agent_dist_dir: str = "./agent-dist"
     max_upload_bytes: int = 524_288_000
     max_hashlist_bytes: int = 104_857_600
-    allowed_hashlist_extensions: List[str] = [".txt", ".hash", ".hashes", ".lst", ".pot"]
+    # WPA text formats (.22000 etc.) are always accepted regardless of this list
+    # via upload_service.BUILTIN_HASHLIST_EXTENSIONS; listed here too for clarity.
+    allowed_hashlist_extensions: List[str] = [
+        ".txt", ".hash", ".hashes", ".lst", ".pot",
+        ".22000", ".hc22000", ".pmkid", ".16800",
+    ]
 
 
 class AgentConfig(BaseModel):

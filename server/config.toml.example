@@ -35,7 +35,9 @@ hashlists_dir  = "./data/hashlists"
 exports_dir    = "./data/exports"
 max_upload_bytes    = 524288000   # 500 MB
 max_hashlist_bytes  = 104857600  # 100 MB
-allowed_hashlist_extensions = [".txt", ".hash", ".hashes", ".lst", ".pot"]
+# WPA/WiFi capture text formats (.22000 etc.) are always accepted regardless of
+# this list, so cracking WiFi handshakes works out of the box.
+allowed_hashlist_extensions = [".txt", ".hash", ".hashes", ".lst", ".pot", ".22000", ".hc22000", ".pmkid", ".16800"]
 
 [agent]
 heartbeat_timeout  = 60
