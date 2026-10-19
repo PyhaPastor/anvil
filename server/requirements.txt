@@ -9,6 +9,9 @@ gunicorn>=22.0.0
 
 # Database
 sqlalchemy>=2.0.31
+# greenlet is required by SQLAlchemy's asyncio engine but is only auto-installed
+# on some CPU architectures — pin it explicitly so async DB init never fails.
+greenlet>=3.0.0
 alembic>=1.13.0
 aiosqlite>=0.20.0
 
