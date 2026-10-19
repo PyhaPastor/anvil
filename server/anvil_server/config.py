@@ -172,6 +172,12 @@ def load_settings() -> Settings:
             "Copy config.toml.example to config.toml and edit it."
         )
     raw = toml.load(CONFIG_PATH)
+    if not raw:
+        raise ValueError(
+            f"Config file at {CONFIG_PATH} is empty or contains no settings. "
+            "Restore it from config.toml.example (preserving your secret_key and "
+            "provisioning_key if you have them) and re-run setup."
+        )
     return Settings(**raw)
 
 
