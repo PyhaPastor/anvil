@@ -11,6 +11,10 @@ session_max_age = 28800
 # IANA timezone for rendering timestamps in the UI (stored values are UTC).
 # Also editable from the dashboard Settings page. e.g. "Europe/Tallinn".
 display_timezone = "UTC"
+# IPs/CIDRs that bypass login on /dashboard and are forced into presentation
+# (kiosk) mode. Empty = kiosk disabled. Also editable from Settings → Kiosk.
+# e.g. ["192.168.100.50", "192.168.10.0/24"]
+kiosk_allowlist = []
 
 [database]
 # SQLite (default — zero ops, file-based)
