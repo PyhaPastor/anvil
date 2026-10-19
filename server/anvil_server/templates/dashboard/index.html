@@ -868,8 +868,14 @@ function commandCenter() {
         this.passwordsTested = primary.keys_tried;
       }
 
-      // Progress + ETA + phase
-      this.liveProgress = primary.progress_pct || 0;
+      // Progress + ETA + phase. During the downloading phase progress_pct is 0
+      // (hashcat hasn't started yet), so drive the ring from the live fetch %
+      // instead of showing a misleading 0% that re-paints on every poll (Bug 4).
+      const _dlPct = (primary.download_progress && primary.download_progress.pct != null)
+                     ? primary.download_progress.pct : 0;
+      this.liveProgress = primary.phase === 'downloading'
+                     ? _dlPct
+                     : (primary.progress_pct || 0);
       this.progressArc  = Math.min(100, this.liveProgress);
       this.liveEta   = primary.eta_seconds ? this._fmtEta(primary.eta_seconds) : '—';
       this.livePhase = primary.phase === 'downloading' ? 'Fetching files…'
@@ -1142,8 +1148,22 @@ function _updateJobRow(jobId, j) {
   const speed   = document.querySelector(`[data-speed="${jobId}"]`);
   const cracked = document.querySelector(`[data-cracked="${jobId}"]`);
   const phaseEl = document.querySelector(`[data-phase="${jobId}"]`);
-  if (pBar    && j.progress_pct != null) { pBar.style.width = j.progress_pct + '%'; }
-  if (pPct    && j.progress_pct != null) { pPct.textContent = Math.round(j.progress_pct) + '%'; }
+  // Bug 4: while a job is in the downloading phase its progress_pct is 0 until
+  // cracking starts, which made the bar flicker to 0% on every poll. Show the
+  // live fetch % (amber-tinted) during downloading; fall back to cracking
+  // progress otherwise. j.phase is undefined for recently-completed rows, so
+  // their status colour and final % are left untouched.
+  if (pBar && j.phase !== undefined) {
+    const downloading = j.phase === 'downloading';
+    const dlPct = (j.download_progress && j.download_progress.pct != null) ? j.download_progress.pct : 0;
+    const shownPct = downloading ? dlPct : (j.progress_pct != null ? j.progress_pct : 0);
+    pBar.style.width = Math.min(100, shownPct) + '%';
+    pBar.style.backgroundColor = downloading ? '#f59e0b' : '';  // amber while fetching files
+    if (pPct) pPct.textContent = Math.round(shownPct) + '%';
+  } else {
+    if (pBar && j.progress_pct != null) { pBar.style.width = j.progress_pct + '%'; }
+    if (pPct && j.progress_pct != null) { pPct.textContent = Math.round(j.progress_pct) + '%'; }
+  }
   if (speed)                             { speed.textContent = j.hashrate ? fmtSpeed(j.hashrate) : ''; }
   if (cracked && j.cracked_count != null){ cracked.textContent = j.cracked_count; }
   if (phaseEl && j.phase !== undefined)  {
