@@ -21,7 +21,7 @@ agent/logs/
 server/offline/
 
 # Personal notes
-to do.txt
+ToDo.txt
 
 # IDE / editor
 .claude/settings.local.json
