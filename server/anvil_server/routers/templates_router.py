@@ -1,5 +1,6 @@
 """Job templates (attack profiles) router."""
 from __future__ import annotations
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models.template import JobTemplate
-from ..models.wordlist import Wordlist
+from ..models.wordlist import Wordlist, Rule
 from ..models.user import User
 from ..services.auth_service import require_analyst
 from ..services import audit_service
@@ -38,9 +39,10 @@ async def new_template_form(
     db: AsyncSession = Depends(get_db),
 ):
     wordlists = (await db.execute(select(Wordlist).order_by(Wordlist.name))).scalars().all()
+    rules = (await db.execute(select(Rule).order_by(Rule.name))).scalars().all()
     return templates.TemplateResponse(request, "templates_mgr/form.html", {
         "user": user, "template": None,
-        "wordlists": wordlists,
+        "wordlists": wordlists, "rules": rules,
         "hashcat_modes": HASHCAT_MODES, "favourite_modes": FAVOURITE_MODES,
     })
 
@@ -55,13 +57,16 @@ async def create_template(
     attack_mode: int = Form(0),
     hash_type: Optional[int] = Form(None),
     wordlist_id: Optional[int] = Form(None),
+    rule_ids: str = Form(""),              # JSON array of rule IDs
     mask: Optional[str] = Form(None),
     extra_flags: Optional[str] = Form(None),
 ):
+    rule_list = json.loads(rule_ids) if rule_ids.strip() else []
     t = JobTemplate(
         name=name, description=description or None,
         attack_mode=attack_mode, hash_type=hash_type,
-        wordlist_id=wordlist_id, mask=mask or None,
+        wordlist_id=wordlist_id, rules_json=rule_list or None,
+        mask=mask or None,
         extra_flags=extra_flags or None, created_by_id=user.id,
     )
     db.add(t)

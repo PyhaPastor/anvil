@@ -224,7 +224,7 @@
         <label class="label">Rules <span class="text-zinc-600">(hold Ctrl to select multiple)</span></label>
         <select name="rules_json_multi" id="rules-select" class="select h-28" multiple>
           {% for r in rules %}
-          <option value="{{ r.id }}">{{ r.name }}</option>
+          <option value="{{ r.id }}"{% if prefill and prefill.rules_json and r.id in prefill.rules_json %} selected{% endif %}>{{ r.name }}</option>
           {% endfor %}
         </select>
         <input type="hidden" name="rule_ids" id="rule_ids_hidden" value="[]"/>
@@ -284,10 +284,12 @@ function hashFileList() {
 document.addEventListener('DOMContentLoaded', () => {
   const sel = document.getElementById('rules-select');
   const hidden = document.getElementById('rule_ids_hidden');
-  if (sel) {
-    sel.addEventListener('change', () => {
+  if (sel && hidden) {
+    const sync = () => {
       hidden.value = JSON.stringify([...sel.selectedOptions].map(o => parseInt(o.value)));
-    });
+    };
+    sel.addEventListener('change', sync);
+    sync();  // seed from rules pre-selected by a template so they submit as-is
   }
 });
 </script>

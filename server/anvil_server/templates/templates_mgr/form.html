@@ -57,9 +57,18 @@
           <select name="wordlist_id" class="select">
             <option value="">— None —</option>
             {% for wl in wordlists %}
-            <option value="{{ wl.id }}">{{ wl.name }}</option>
+            <option value="{{ wl.id }}"{% if template and template.wordlist_id == wl.id %} selected{% endif %}>{{ wl.name }}</option>
             {% endfor %}
           </select>
+        </div>
+        <div class="md:col-span-2" x-show="attackMode === '0'">
+          <label class="label">Rules <span class="text-zinc-600">(hold Ctrl to select multiple)</span></label>
+          <select id="rules-select" class="select h-28" multiple>
+            {% for r in rules %}
+            <option value="{{ r.id }}"{% if template and template.rules_json and r.id in template.rules_json %} selected{% endif %}>{{ r.name }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="rule_ids" id="rule_ids_hidden" value="[]"/>
         </div>
         <div x-show="['3','6','7'].includes(attackMode)">
           <label class="label">Mask</label>
@@ -82,4 +91,21 @@
     </div>
   </form>
 </div>
+
+<script>
+// Serialise the multi-select rules into the hidden JSON field the handler reads.
+// sync() is also called once on load so any pre-selected rules submit even when
+// the user never touches the control.
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('rules-select');
+  const hidden = document.getElementById('rule_ids_hidden');
+  if (sel && hidden) {
+    const sync = () => {
+      hidden.value = JSON.stringify([...sel.selectedOptions].map(o => parseInt(o.value)));
+    };
+    sel.addEventListener('change', sync);
+    sync();
+  }
+});
+</script>
 {% endblock %}
