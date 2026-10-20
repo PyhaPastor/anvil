@@ -1,6 +1,7 @@
 """Agent API — REST endpoints for the Anvil cracking agent."""
 from __future__ import annotations
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
@@ -19,7 +20,14 @@ from ...services.auth_service import get_agent_from_token
 from ...services.ws_manager import ws_manager
 from ...services.notification_service import notify_job_complete
 
+logger = logging.getLogger("anvil.server.agent_api")
+
 router = APIRouter(prefix="/api/v1/agent")
+
+# Grace period before a RUNNING job the agent isn't reporting as current is
+# treated as orphaned. Protects the brief window between /jobs/next marking a job
+# RUNNING and the agent's first heartbeat reporting it as current_job_id.
+_ORPHAN_GRACE_SECONDS = 120
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +226,34 @@ async def heartbeat(
     # Update cached wordlist inventory
     if payload.wordlist_cache is not None:
         agent.wordlist_cache = [e.model_dump() for e in payload.wordlist_cache]
+
+    # Reconcile orphaned RUNNING jobs. The agent runs exactly one job at a time,
+    # so any job still marked RUNNING for this agent that it is NOT currently
+    # working on was left stranded (agent restart or crash between picking the job
+    # up and submitting its result). Without this it would show "running/stalled"
+    # on the dashboard forever. Fail those so their state reflects reality; a short
+    # grace window protects a job just handed out by /jobs/next whose first
+    # heartbeat hasn't yet reported it as current.
+    orphan_q = select(Job).where(
+        Job.agent_id == agent.id,
+        Job.status == JobStatus.RUNNING,
+    )
+    if payload.current_job_id:
+        orphan_q = orphan_q.where(Job.id != payload.current_job_id)
+    now = datetime.utcnow()
+    for stranded in (await db.execute(orphan_q)).scalars().all():
+        if stranded.started_at and (now - stranded.started_at) < timedelta(seconds=_ORPHAN_GRACE_SECONDS):
+            continue
+        stranded.status = JobStatus.FAILED
+        stranded.completed_at = now
+        stranded.error_message = (
+            "Interrupted — the assigned agent stopped running this job "
+            "(agent restart or crash)."
+        )
+        logger.warning(
+            "Agent %d heartbeat (current_job_id=%s): failed orphaned running job %d",
+            agent.id, payload.current_job_id, stranded.id,
+        )
 
     return {"status": "ok"}
 
