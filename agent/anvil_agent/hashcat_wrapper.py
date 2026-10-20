@@ -10,6 +10,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -78,7 +79,10 @@ class HashcatWrapper:
         started_at_ts: float,
         outfile_path: Path,
     ) -> AsyncIterator[ProgressEvent]:
-        self._cancelled = False
+        # NOTE: self._cancelled is deliberately NOT reset here. A fresh wrapper is
+        # created per job, and a cancel can arrive while the runner is still staging
+        # files (before this generator first advances); resetting here would clobber
+        # it. __init__ already initialised it to False.
         self._stalled = False
         self._stall_error = None
 
@@ -176,6 +180,16 @@ class HashcatWrapper:
             yield ProgressEvent(status="error", error=str(exc))
             return
 
+        # A cancel may have arrived while the runner was staging files (before this
+        # generator advanced). Honour it now rather than starting a doomed run.
+        if self._cancelled:
+            try:
+                self._proc.terminate()
+            except ProcessLookupError:
+                pass
+            yield ProgressEvent(status="aborted")
+            return
+
         # Collect stderr concurrently so it doesn't block the process
         stderr_chunks: list[bytes] = []
 
@@ -266,7 +280,21 @@ class HashcatWrapper:
         outfile: str,
         cpu_fallback: bool = False,
     ) -> List[str]:
-        cmd = [
+        cmd: List[str] = []
+
+        # Force hashcat to line-buffer its output. Its stdout is a pipe here (not a
+        # TTY), so glibc fully-buffers it (~4 KB): --status-json lines then sit in
+        # hashcat's own buffer and don't reach our readline() until the buffer fills
+        # or the process exits. That freezes live progress/hashrate/recovered on the
+        # dashboard and blinds the stall watchdog. `stdbuf -oL -eL` restores line
+        # buffering. It execs the target in place (no extra process, so the PID we
+        # track is still hashcat). Linux/coreutils only; absent elsewhere we just run
+        # hashcat directly (e.g. a Windows agent).
+        stdbuf = shutil.which("stdbuf")
+        if stdbuf:
+            cmd.extend([stdbuf, "-oL", "-eL"])
+
+        cmd += [
             binary,
             f"--attack-mode={attack_mode}",
             f"--hash-type={hash_type}",
@@ -425,6 +453,15 @@ class HashcatWrapper:
             except asyncio.TimeoutError:
                 if proc.returncode is not None:
                     break
+                # Cancel requested while hashcat is silent — terminate promptly
+                # instead of waiting for the next status line (which may never come
+                # if hashcat has genuinely hung).
+                if self._cancelled:
+                    try:
+                        proc.terminate()
+                    except ProcessLookupError:
+                        pass
+                    return
                 silence = time.monotonic() - last_output
                 limit = stall_timeout if first_status_seen else warmup_timeout
                 if limit and silence > limit:
@@ -624,3 +661,63 @@ class HashcatWrapper:
         if home:
             env["HOME"] = home
         return env
+
+
+def kill_stray_hashcat() -> int:
+    """Kill hashcat processes left over from a previous agent run.
+
+    If the agent (or the box) restarts while a job is cracking, the hashcat child
+    can keep running and peg the GPU(s) with no Python process managing it, so the
+    job stays wedged. On startup we reap those. A process is treated as ours only
+    if BOTH the hashcat binary name AND our workdir appear in its command line, so
+    unrelated hashcat invocations on the same host are left alone.
+
+    Linux-only (scans /proc); a no-op on platforms without it. Returns the count
+    of processes signalled.
+    """
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return 0
+
+    binary_name = Path(settings.hashcat.binary).name
+    workdir = str(settings.hashcat.workdir)
+    my_pid = os.getpid()
+    targets: list[tuple[int, str]] = []
+
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        if pid == my_pid:
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue  # process vanished or not readable
+        if not raw:
+            continue
+        cmdline = raw.replace(b"\x00", b" ").decode(errors="replace").strip()
+        if binary_name in cmdline and workdir in cmdline:
+            targets.append((pid, cmdline))
+
+    for pid, cmdline in targets:
+        logger.warning("Killing stray hashcat (pid=%d) from a previous run: %s", pid, cmdline[:300])
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+
+    if targets:
+        time.sleep(2)
+        for pid, _ in targets:
+            try:
+                os.kill(pid, 0)  # raises if already gone
+            except OSError:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                logger.warning("Stray hashcat pid=%d ignored SIGTERM; sent SIGKILL", pid)
+            except OSError:
+                pass
+
+    return len(targets)
