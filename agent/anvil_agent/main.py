@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import settings
 from .hardware_monitor import HardwareMonitor, get_capabilities
+from .hashcat_wrapper import kill_stray_hashcat
 from .job_runner import JobRunner
 from .server_client import (
     AgentWSClient,
@@ -56,6 +57,15 @@ class AnvilAgent:
 
         logger.info("Anvil Agent '%s' starting...", settings.agent.name)
         logger.info("Server: %s", settings.agent.server_url)
+
+        # Reap any hashcat left running by a previous agent instance (e.g. after a
+        # crash/restart) so it can't keep a GPU pegged with no job managing it.
+        try:
+            n = kill_stray_hashcat()
+            if n:
+                logger.warning("Cleaned up %d stray hashcat process(es) from a previous run.", n)
+        except Exception as exc:
+            logger.warning("Stray-hashcat cleanup failed: %s", exc)
 
         # Register capabilities
         caps = get_capabilities()

@@ -34,6 +34,19 @@ class JobRunner:
         self._ws.register_cancel(job_id, cancel_event)
 
         wrapper = HashcatWrapper()
+
+        # Watch for cancel independently of the status-event stream. The main loop
+        # below only observes cancel_event between yielded hashcat status events, so
+        # if hashcat goes silent (or hangs) a cancel would otherwise sit unread until
+        # the stall watchdog fires (up to warmup_timeout). This task calls
+        # wrapper.cancel() the instant the cancel arrives, terminating hashcat (and
+        # thus unblocking the output stream) within ~1s.
+        async def _await_cancel() -> None:
+            await cancel_event.wait()
+            logger.info("Job %d: cancel received — terminating hashcat", job_id)
+            wrapper.cancel()
+
+        cancel_watcher = asyncio.create_task(_await_cancel())
         cracked_entries = []
         last_event: Optional[ProgressEvent] = None
         error_message: Optional[str] = None
@@ -108,6 +121,7 @@ class JobRunner:
             logger.exception("Job %d runner error: %s", job_id, exc)
             error_message = str(exc)
         finally:
+            cancel_watcher.cancel()  # stop the cancel-watcher task
             wrapper.cancel()  # no-op if already cancelled or process already exited
             self._ws.deregister_cancel(job_id)
             await self._hw.set_job_context(None, None)
