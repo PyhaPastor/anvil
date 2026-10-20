@@ -33,6 +33,18 @@ router = APIRouter(prefix="/wordlists")
 _WORDLIST_EXTS = [".txt", ".lst", ".dict", ".wl"]
 _RULE_EXTS = [".rule", ".rules", ".txt"]
 
+# Hard ceiling on generated candidates — protects server CPU/disk on an always-on box.
+_GENERATE_CAP = 1_000_000
+# Basic leetspeak substitutions, applied to both letter cases.
+_LEET_MAP = str.maketrans({
+    "a": "@", "e": "3", "i": "1", "o": "0", "s": "$",
+    "A": "@", "E": "3", "I": "1", "O": "0", "S": "$",
+})
+
+
+def _truthy(v: str) -> bool:
+    return v.strip().lower() in ("on", "true", "1", "yes")
+
 
 def _count_lines_binary(path: str) -> int:
     """Count newlines by reading raw bytes — no encoding issues, fast."""
@@ -277,6 +289,157 @@ async def fetch_wordlist_from_url(
             "name": name,
             "line_count": line_count,
             "size_bytes": downloaded,
+        })
+    return RedirectResponse("/wordlists", status_code=302)
+
+
+@router.post("/generate")
+async def generate_wordlist(
+    request: Request,
+    user: User = Depends(require_analyst),
+    db: AsyncSession = Depends(get_db),
+    name: str = Form(...),
+    description: str = Form(""),
+    category: str = Form(""),
+    base_words: str = Form(...),
+    case_lower: str = Form(""),
+    case_upper: str = Form(""),
+    case_capitalize: str = Form(""),
+    use_leet: str = Form(""),
+    use_years: str = Form(""),
+    year_from: str = Form(""),
+    year_to: str = Form(""),
+    use_suffixes: str = Form(""),
+    suffixes: str = Form(""),
+):
+    """Generate a wordlist by combining base words with case/leet/year/suffix mutations."""
+
+    def _err(detail: str, status: int = 400):
+        if _is_xhr(request):
+            return JSONResponse({"ok": False, "detail": detail}, status_code=status)
+        raise HTTPException(status, detail)
+
+    # Parse + dedupe base words (preserving order)
+    words: list[str] = []
+    seen_words: set[str] = set()
+    for line in base_words.replace("\r", "").split("\n"):
+        w = line.strip()
+        if w and w not in seen_words:
+            seen_words.add(w)
+            words.append(w)
+    if not words:
+        return _err("Enter at least one base word.")
+
+    # Case variants (as-typed is always included)
+    variants: list[str] = []
+    if _truthy(case_lower):
+        variants.append("lower")
+    if _truthy(case_upper):
+        variants.append("upper")
+    if _truthy(case_capitalize):
+        variants.append("capitalize")
+
+    # Year range
+    years: list[str] = []
+    if _truthy(use_years):
+        try:
+            yf, yt = int(year_from), int(year_to)
+        except ValueError:
+            return _err("Year range must be whole numbers.")
+        if not (1900 <= yf <= 2100 and 1900 <= yt <= 2100):
+            return _err("Years must be between 1900 and 2100.")
+        if yf > yt:
+            return _err("Year 'from' must not be greater than 'to'.")
+        years = [str(y) for y in range(yf, yt + 1)]
+
+    # Suffixes (split on whitespace and commas)
+    suffix_list: list[str] = []
+    if _truthy(use_suffixes):
+        suffix_list = [s for s in re.split(r"[\s,]+", suffixes.strip()) if s]
+
+    leet = _truthy(use_leet)
+
+    # Pre-flight upper-bound check so we never do the work if it can't fit the cap
+    case_count = (1 + len(variants)) * (2 if leet else 1)
+    append_count = 1 + len(years) + len(suffix_list)
+    upper_bound = len(words) * case_count * append_count
+    if upper_bound > _GENERATE_CAP:
+        return _err(
+            f"This combination could produce up to {upper_bound:,} candidates, "
+            f"over the {_GENERATE_CAP:,} line limit. Narrow your options "
+            f"(fewer base words, years, or suffixes)."
+        )
+
+    def _build() -> list[str]:
+        append_tokens = [""] + years + suffix_list
+        out: list[str] = []
+        seen: set[str] = set()
+        for w in words:
+            forms = [w]
+            if "lower" in variants:
+                forms.append(w.lower())
+            if "upper" in variants:
+                forms.append(w.upper())
+            if "capitalize" in variants:
+                forms.append(w[:1].upper() + w[1:].lower())
+            stems = list(forms)
+            if leet:
+                stems.extend(f.translate(_LEET_MAP) for f in forms)
+            for stem in stems:
+                for tok in append_tokens:
+                    cand = stem + tok
+                    if cand and cand not in seen:
+                        seen.add(cand)
+                        out.append(cand)
+        return out
+
+    candidates = await asyncio.to_thread(_build)
+    if not candidates:
+        return _err("The selected options produced no candidates.")
+
+    # Derive a safe, clobber-free .txt filename from the wordlist name
+    safe_filename = re.sub(r"[^a-zA-Z0-9._\-]", "_", name)[:128] or "generated"
+    if not safe_filename.lower().endswith(".txt"):
+        safe_filename += ".txt"
+    dest_dir = Path(settings.storage.wordlists_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / safe_filename
+    stem, suffix = dest_path.stem, dest_path.suffix
+    counter = 1
+    while dest_path.exists():
+        dest_path = dest_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    def _write() -> int:
+        with open(dest_path, "w", encoding="utf-8", newline="\n") as fout:
+            fout.write("\n".join(candidates))
+            fout.write("\n")
+        return dest_path.stat().st_size
+
+    try:
+        size = await asyncio.to_thread(_write)
+    except Exception as exc:
+        dest_path.unlink(missing_ok=True)
+        return _err(f"Could not write wordlist: {exc}", 500)
+
+    wl = Wordlist(
+        name=name, description=description or None,
+        file_path=str(dest_path), file_size_bytes=size,
+        line_count=len(candidates), category=category or None,
+        uploaded_by_id=user.id,
+    )
+    db.add(wl)
+    await db.flush()
+    await audit_service.log_action(db, "wordlist_generated", user_id=user.id,
+                                   resource_type="wordlist", resource_id=wl.id,
+                                   details={"name": name, "line_count": len(candidates)})
+
+    if _is_xhr(request):
+        return JSONResponse({
+            "ok": True,
+            "name": name,
+            "line_count": len(candidates),
+            "size_bytes": size,
         })
     return RedirectResponse("/wordlists", status_code=302)
 
