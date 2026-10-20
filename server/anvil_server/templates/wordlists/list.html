@@ -28,11 +28,17 @@
         </svg>
         Fetch from URL
       </button>
-      <button @click="showRuleUpload=!showRuleUpload; showWlUpload=false" class="btn-upload">
+      <button @click="showRuleUpload=!showRuleUpload; showWlUpload=false; showUrlFetch=false; showGenerate=false" class="btn-upload">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
         </svg>
         Upload rule file
+      </button>
+      <button @click="showGenerate=!showGenerate; showWlUpload=false; showUrlFetch=false; showRuleUpload=false" class="btn-create">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+        </svg>
+        Generate wordlist
       </button>
     </div>
   </div>
@@ -145,6 +151,106 @@
           Upload rule file
         </button>
       </div>
+    </form>
+  </div>
+
+  <!-- Generate panel -->
+  <div x-show="showGenerate" x-cloak class="card border-emerald-800">
+    <h2 class="text-sm font-semibold text-emerald-300 mb-4">Generate wordlist</h2>
+    <form id="gen-form" class="grid grid-cols-1 md:grid-cols-2 gap-4"
+          @submit.prevent="doGenerate($el)">
+      <div>
+        <label class="label">Name *</label>
+        <input name="name" type="text" required class="input" placeholder="e.g. acme-targeted"/>
+      </div>
+      <div>
+        <label class="label">Category</label>
+        <input name="category" type="text" class="input" placeholder="e.g. wifi, targeted"/>
+      </div>
+      <div class="md:col-span-2">
+        <label class="label">Description</label>
+        <input name="description" type="text" class="input" placeholder="Optional description"/>
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="label">Base words * <span class="text-zinc-500">(one per line)</span></label>
+        <textarea name="base_words" required rows="5"
+                  class="input font-mono text-sm"
+                  placeholder="acme&#10;summer&#10;admin"></textarea>
+        <p class="text-xs text-zinc-500 mt-1">The seed words that every candidate is built from.</p>
+      </div>
+
+      <div class="md:col-span-2 border-t border-theme pt-3">
+        <p class="label mb-2">Mutations</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+
+          <!-- Case variants -->
+          <div class="space-y-1.5">
+            <p class="text-xs text-zinc-500 uppercase tracking-wider">Case variants</p>
+            <label class="flex items-center gap-2 text-zinc-300">
+              <input type="checkbox" name="case_lower" value="on" class="accent-emerald-500"/> lowercase
+            </label>
+            <label class="flex items-center gap-2 text-zinc-300">
+              <input type="checkbox" name="case_upper" value="on" class="accent-emerald-500"/> UPPERCASE
+            </label>
+            <label class="flex items-center gap-2 text-zinc-300">
+              <input type="checkbox" name="case_capitalize" value="on" class="accent-emerald-500"/> Capitalized
+            </label>
+            <p class="text-[11px] text-zinc-600">The word as typed is always included.</p>
+          </div>
+
+          <!-- Leet + suffixes + years -->
+          <div class="space-y-3">
+            <label class="flex items-center gap-2 text-zinc-300">
+              <input type="checkbox" name="use_leet" value="on" class="accent-emerald-500"/>
+              Leetspeak <span class="text-zinc-600 text-xs font-mono">(a→@ e→3 i→1 o→0 s→$)</span>
+            </label>
+
+            <div class="space-y-1.5">
+              <label class="flex items-center gap-2 text-zinc-300">
+                <input type="checkbox" name="use_years" value="on" x-model="gen.years" class="accent-emerald-500"/>
+                Append numbers <span class="text-zinc-600 text-xs">(e.g. years)</span>
+              </label>
+              <div class="flex items-center gap-2 pl-6" :class="gen.years ? '' : 'opacity-40'">
+                <input name="year_from" type="number" min="1" max="9999" value="1990"
+                       :disabled="!gen.years" class="input w-24 text-sm"/>
+                <span class="text-zinc-600 text-xs">to</span>
+                <input name="year_to" type="number" min="1" max="9999" value="2026"
+                       :disabled="!gen.years" class="input w-24 text-sm"/>
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="flex items-center gap-2 text-zinc-300">
+                <input type="checkbox" name="use_suffixes" value="on" x-model="gen.suffixes" class="accent-emerald-500"/>
+                Append suffixes
+              </label>
+              <input name="suffixes" type="text" value="! 123 1234 12 !@# 01"
+                     :disabled="!gen.suffixes" class="input text-sm font-mono ml-6 w-[calc(100%-1.5rem)]"
+                     :class="gen.suffixes ? '' : 'opacity-40'"
+                     placeholder="space- or comma-separated"/>
+            </div>
+          </div>
+        </div>
+        <p class="text-[11px] text-zinc-600 mt-3">Hard limit: 1,000,000 candidates. If the combination could exceed it, generation is rejected so you can narrow the options.</p>
+      </div>
+
+      <div class="md:col-span-2 flex items-center justify-between pt-2 border-t border-theme">
+        <button type="button" @click="showGenerate=false" class="btn-secondary text-sm">Cancel</button>
+        <button type="submit" :disabled="gen.active" class="btn-create"
+                :class="gen.active ? 'opacity-50 cursor-not-allowed' : ''">
+          <template x-if="gen.active">
+            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          </template>
+          <span x-text="gen.active ? 'Generating…' : 'Generate wordlist'"></span>
+        </button>
+      </div>
+      <template x-if="gen.error">
+        <div class="md:col-span-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-300" x-text="gen.error"></div>
+      </template>
     </form>
   </div>
 
@@ -442,9 +548,11 @@ function wordlistsPage(agentsData) {
     showWlUpload: false,
     showRuleUpload: false,
     showUrlFetch: false,
+    showGenerate: false,
     wl: _blank(),
     rule: _blank(),
     urlFetch: { active: false, error: '' },
+    gen: { active: false, error: '', years: true, suffixes: true },
 
     // Push-to-agent modal
     agents: agentsData || [],
@@ -566,6 +674,38 @@ function wordlistsPage(agentsData) {
       } catch (err) {
         this.urlFetch.error = 'Network error — check your connection and try again.';
         this.urlFetch.active = false;
+      }
+    },
+
+    async doGenerate(formEl) {
+      if (!formEl.checkValidity()) { formEl.reportValidity(); return; }
+      this.gen.active = true;
+      this.gen.error = '';
+      const data = new FormData(formEl);
+      try {
+        const r = await fetch('/wordlists/generate', {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          body: data,
+        });
+        const resp = await r.json();
+        if (r.ok && resp.ok) {
+          // Reuse the upload modal for the success display
+          this.wl = {
+            active: true, phase: 'done', status: 'success', pct: 100,
+            title: 'Wordlist generated', subtitle: '',
+            msg: `"${resp.name}" generated successfully`,
+            details: { line_count: resp.line_count, size_bytes: resp.size_bytes },
+          };
+          this.showGenerate = false;
+          setTimeout(() => window.location.reload(), 2500);
+        } else {
+          this.gen.error = resp.detail || `Server error (${r.status})`;
+          this.gen.active = false;
+        }
+      } catch (err) {
+        this.gen.error = 'Network error — check your connection and try again.';
+        this.gen.active = false;
       }
     },
 
