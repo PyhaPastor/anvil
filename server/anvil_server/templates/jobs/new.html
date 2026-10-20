@@ -85,10 +85,10 @@
 
       <!-- Upload section -->
       <div x-show="hashSource === 'upload'" class="space-y-2">
-        <label class="label">Hash file(s) <span class="text-zinc-600">(.txt, .hash, .lst, .hashes)</span></label>
+        <label class="label">Hash file(s) <span class="text-zinc-600">(.txt, .hash, .lst, .hashes, WPA .22000/.hc22000/.pmkid/.16800)</span></label>
         <input name="hash_files" type="file" multiple
                :required="hashSource === 'upload'"
-               accept=".txt,.hash,.hashes,.lst,.pot"
+               accept=".txt,.hash,.hashes,.lst,.pot,.22000,.hc22000,.pmkid,.16800"
                class="block w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-zinc-700 file:text-zinc-200 hover:file:bg-zinc-600 cursor-pointer"/>
         <p class="text-xs text-zinc-500">Hold Ctrl/⌘ to select multiple files at once.</p>
       </div>
