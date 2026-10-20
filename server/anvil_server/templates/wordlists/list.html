@@ -209,13 +209,13 @@
             <div class="space-y-1.5">
               <label class="flex items-center gap-2 text-zinc-300">
                 <input type="checkbox" name="use_years" value="on" x-model="gen.years" class="accent-emerald-500"/>
-                Append years
+                Append numbers <span class="text-zinc-600 text-xs">(e.g. years)</span>
               </label>
               <div class="flex items-center gap-2 pl-6" :class="gen.years ? '' : 'opacity-40'">
-                <input name="year_from" type="number" min="1900" max="2100" value="1990"
+                <input name="year_from" type="number" min="1" max="9999" value="1990"
                        :disabled="!gen.years" class="input w-24 text-sm"/>
                 <span class="text-zinc-600 text-xs">to</span>
-                <input name="year_to" type="number" min="1900" max="2100" value="2026"
+                <input name="year_to" type="number" min="1" max="9999" value="2026"
                        :disabled="!gen.years" class="input w-24 text-sm"/>
               </div>
             </div>

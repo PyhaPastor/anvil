@@ -339,18 +339,18 @@ async def generate_wordlist(
     if _truthy(case_capitalize):
         variants.append("capitalize")
 
-    # Year range
-    years: list[str] = []
+    # Number range (e.g. years, or short runs like 1-99)
+    numbers: list[str] = []
     if _truthy(use_years):
         try:
-            yf, yt = int(year_from), int(year_to)
+            nf, nt = int(year_from), int(year_to)
         except ValueError:
-            return _err("Year range must be whole numbers.")
-        if not (1900 <= yf <= 2100 and 1900 <= yt <= 2100):
-            return _err("Years must be between 1900 and 2100.")
-        if yf > yt:
-            return _err("Year 'from' must not be greater than 'to'.")
-        years = [str(y) for y in range(yf, yt + 1)]
+            return _err("Number range must be whole numbers.")
+        if not (1 <= nf <= 9999 and 1 <= nt <= 9999):
+            return _err("Numbers must be between 1 and 9999.")
+        if nf > nt:
+            return _err("Range 'from' must not be greater than 'to'.")
+        numbers = [str(n) for n in range(nf, nt + 1)]
 
     # Suffixes (split on whitespace and commas)
     suffix_list: list[str] = []
@@ -361,7 +361,7 @@ async def generate_wordlist(
 
     # Pre-flight upper-bound check so we never do the work if it can't fit the cap
     case_count = (1 + len(variants)) * (2 if leet else 1)
-    append_count = 1 + len(years) + len(suffix_list)
+    append_count = 1 + len(numbers) + len(suffix_list)
     upper_bound = len(words) * case_count * append_count
     if upper_bound > _GENERATE_CAP:
         return _err(
@@ -371,7 +371,7 @@ async def generate_wordlist(
         )
 
     def _build() -> list[str]:
-        append_tokens = [""] + years + suffix_list
+        append_tokens = [""] + numbers + suffix_list
         out: list[str] = []
         seen: set[str] = set()
         for w in words:
