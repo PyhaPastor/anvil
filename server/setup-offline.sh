@@ -214,7 +214,9 @@ fi
 section "Generating secret key"
 if grep -qE "CHANGE_ME_BEFORE_FIRST_RUN|dev-only-key-change-before-production" "${CONFIG_FILE}" 2>/dev/null; then
     SECRET=$("${VENV_DIR}/bin/python" -c "import secrets; print(secrets.token_hex(64))")
-    sed -i -E "s/secret_key = \"[^\"]+\"/secret_key = \"${SECRET}\"/" "${CONFIG_FILE}"
+    # Match any whitespace around '=' (the example aligns it with several spaces),
+    # otherwise the placeholder is never replaced and startup rejects CHANGE_ME.
+    sed -i -E "s|^secret_key[[:space:]]*=.*|secret_key = \"${SECRET}\"|" "${CONFIG_FILE}"
     info "Secret key written to config"
 else
     warn "Secret key already set — skipping"
