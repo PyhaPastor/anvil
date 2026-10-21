@@ -103,7 +103,7 @@ The agent appears in **Admin → Agents** immediately after installation — no 
 
 ### 3. Create a job
 
-1. Upload a wordlist under **Wordlists**
+1. Add a wordlist under **Wordlists** — upload a file, fetch one from a URL, or generate one
 2. Go to **Jobs → New job**
 3. Select a **customer** — required for every job (used to scope per-customer hash deletion)
 4. Upload one or more hash list files
@@ -259,9 +259,49 @@ The server regenerates the certificate on restart.
 
 ---
 
+## Wordlists
+
+The **Wordlists** page is where you build and manage the dictionaries (and rule
+files) that attacks draw from. There are three ways to add a wordlist, plus rule
+uploads:
+
+### Upload
+
+Upload a wordlist file directly (`.txt`, `.lst`, `.dict`, `.wl`). Rule files
+(`.rule`, `.rules`) are uploaded from the same page via **Upload rule file**.
+Uploads are subject to the per-role size limit (30 GB for non-admins, unlimited
+for admins).
+
+### Fetch from URL
+
+**Fetch from URL** downloads a wordlist directly from an `http://` or `https://`
+link and saves it to the library — handy for pulling a published list onto the
+server without a local copy. Provide the URL plus a name (category and
+description are optional). The same per-role size limit applies. The target
+address is checked first: URLs that resolve to private, loopback, link-local, or
+reserved addresses are rejected (SSRF protection).
+
+### Generate
+
+**Generate wordlist** builds a targeted list from a handful of seed words using
+simple combinator mutations — useful for customer-specific guessing (company
+name, product names, local sports teams, etc.). Supply one or more **base
+words**, then enable any combination of:
+
+- **Case variants** — lowercase, UPPERCASE, Capitalized (the word as typed is
+  always included)
+- **Leetspeak** — `a→@ e→3 i→1 o→0 s→$`
+- **Append numbers** — a year range (e.g. `1990`–`2026`)
+- **Append suffixes** — a custom list such as `! 123 1234 12 !@# 01`
+
+Generation is capped at **1,000,000 candidates**; if the selected combination
+could exceed that, it is rejected so you can narrow the options.
+
+---
+
 ## Creating a cracking job
 
-1. Upload a wordlist under **Wordlists** (`.txt`, `.lst`, `.dict`, `.wl`)
+1. Add a wordlist under **Wordlists** — upload a file (`.txt`, `.lst`, `.dict`, `.wl`), fetch one from a URL, or generate one (see [Wordlists](#wordlists) above)
 2. Optionally upload rule files (`.rule`, `.rules`) under **Wordlists → Upload rule file**
 3. Go to **Jobs → New job**
 4. Pick a **customer** — required. Every job must be scoped to a customer so the per-customer "Delete hashes" action has a clear blast radius. The form blocks submission without one.
@@ -357,7 +397,7 @@ All significant actions are recorded:
 - Job created / cancelled / re-run
 - User created / role changed / password reset
 - Agent registered / deactivated
-- Wordlist / rule uploaded or deleted
+- Wordlist uploaded / fetched from URL / generated / deleted, rule uploaded or deleted
 - Exports (CSV and PDF)
 - Settings changes (provisioning key rotation, allowlist updates)
 
@@ -406,6 +446,7 @@ sudo journalctl -u     anvil-agent -f
 - Hashcat is invoked via `asyncio.create_subprocess_exec` — no shell injection possible
 - Dangerous hashcat flags (`--outfile`, `--potfile-path`, `--session`, etc.) are blocked in the job creation form
 - File uploads are stream-validated with size limits, extension allowlists, filename sanitisation, and resolved-path confinement checks (30 GB limit for non-admin; no limit for admin)
+- URL wordlist fetches are SSRF-guarded — the target hostname is resolved and rejected if it points to a private, loopback, link-local, or reserved address
 - All database queries use SQLAlchemy ORM parameterised statements
 - bcrypt rounds configurable (default 12, minimum enforced at 10)
 - Presentation role never receives plaintext passwords or usernames — enforced at query layer and in exports
