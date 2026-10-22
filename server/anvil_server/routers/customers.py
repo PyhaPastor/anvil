@@ -116,6 +116,75 @@ async def update_customer(
     return RedirectResponse("/customers", status_code=302)
 
 
+@router.get("/{customer_id}/hashes", response_class=HTMLResponse)
+async def customer_hashes(
+    customer_id: int,
+    request: Request,
+    user: User = Depends(require_analyst),
+    db: AsyncSession = Depends(get_db),
+):
+    """List the cracked credentials recovered across all of a customer's jobs."""
+    c = await db.get(Customer, customer_id)
+    if not c:
+        raise HTTPException(status_code=404)
+
+    # Distinct hash-value counts for the summary line. Hashes are copied per job
+    # (and per batch sibling), so everything here is deduplicated by hash_value.
+    base = (
+        select(Hash.hash_value)
+        .join(HashList, Hash.hash_list_id == HashList.id)
+        .join(Job, HashList.job_id == Job.id)
+        .where(Job.customer_id == customer_id)
+    )
+    total_distinct = (await db.execute(
+        select(func.count()).select_from(base.distinct().subquery())
+    )).scalar_one()
+    cracked_distinct = (await db.execute(
+        select(func.count()).select_from(
+            base.where(Hash.plaintext.is_not(None)).distinct().subquery()
+        )
+    )).scalar_one()
+
+    # Deduplicated cracked credentials — one row per (hash_value, username),
+    # most-recently-cracked first, capped for the page.
+    display_limit = 1000
+    rows = (await db.execute(
+        select(
+            Hash.username,
+            Hash.hash_value,
+            func.max(Hash.plaintext).label("plaintext"),
+            func.max(Hash.cracked_at).label("cracked_at"),
+        )
+        .join(HashList, Hash.hash_list_id == HashList.id)
+        .join(Job, HashList.job_id == Job.id)
+        .where(Job.customer_id == customer_id, Hash.plaintext.is_not(None))
+        .group_by(Hash.hash_value, Hash.username)
+        .order_by(func.max(Hash.cracked_at).desc())
+        .limit(display_limit)
+    )).all()
+
+    hashes = [
+        {"username": r.username, "hash_value": r.hash_value,
+         "plaintext": r.plaintext, "cracked_at": r.cracked_at}
+        for r in rows
+    ]
+    has_username = any(h["username"] is not None for h in hashes)
+
+    await audit_service.log_action(
+        db, "customer_hashes_viewed", user_id=user.id,
+        resource_type="customer", resource_id=customer_id,
+        details={"cracked": cracked_distinct, "total": total_distinct},
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return templates.TemplateResponse(request, "customers/hashes.html", {
+        "user": user, "customer": c,
+        "hashes": hashes, "has_username": has_username,
+        "total_distinct": total_distinct, "cracked_distinct": cracked_distinct,
+        "display_limit": display_limit,
+    })
+
+
 @router.post("/{customer_id}/hashes/delete")
 async def delete_customer_hashes(
     customer_id: int,
