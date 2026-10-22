@@ -258,7 +258,7 @@ async def dashboard_live(
     recently_done = (await db.execute(
         select(Job)
         .where(
-            Job.status.in_([JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]),
+            Job.status.in_([JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.SKIPPED]),
             Job.completed_at >= two_min_ago,
         )
         .order_by(Job.completed_at.desc())

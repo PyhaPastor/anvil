@@ -18,6 +18,10 @@ class JobStatus(str, enum.Enum):
     COMPLETED = "completed"
     FAILED    = "failed"
     CANCELLED = "cancelled"
+    # Auto-set when every hash in this job's hash file was already recovered by
+    # another job, so running it would be wasted work. Distinct from CANCELLED
+    # (a manual user action).
+    SKIPPED   = "skipped"
 
 
 class AttackMode(int, enum.Enum):

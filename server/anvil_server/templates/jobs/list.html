@@ -18,7 +18,7 @@
       <label class="label">Status</label>
       <select name="status_filter" class="select w-36" onchange="this.form.submit()">
         <option value="">All</option>
-        {% for s in ['pending','queued','running','completed','failed','cancelled','paused'] %}
+        {% for s in ['pending','queued','running','completed','failed','cancelled','skipped','paused'] %}
         <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s|capitalize }}</option>
         {% endfor %}
       </select>
@@ -97,7 +97,7 @@
                 </button>
               </form>
               {% endif %}
-              {% if user.can_create_jobs() and job.status.value in ['failed','cancelled'] %}
+              {% if user.can_create_jobs() and job.status.value in ['failed','cancelled','skipped'] %}
               <form method="post" action="/jobs/{{ job.id }}/rerun">
                 <button type="submit" class="btn-create text-xs px-2 py-1">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

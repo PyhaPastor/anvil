@@ -30,7 +30,7 @@
         </button>
       </form>
       {% endif %}
-      {% if user.can_create_jobs() and job.status.value in ['failed','cancelled'] %}
+      {% if user.can_create_jobs() and job.status.value in ['failed','cancelled','skipped'] %}
       <form method="post" action="/jobs/{{ job.id }}/rerun">
         <button type="submit" class="btn-create text-xs">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
