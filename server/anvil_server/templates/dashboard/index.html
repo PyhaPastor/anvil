@@ -63,6 +63,7 @@
               x-text="completionState
                 ? (completionState.status === 'completed' ? 'Operation Complete'
                   : completionState.status === 'failed'    ? 'Operation Failed'
+                  : completionState.status === 'skipped'   ? 'Already Recovered'
                   : 'Operation Cancelled')
                 : 'Live Cracking Operation'">Live Cracking Operation</span>
       </div>
@@ -91,14 +92,14 @@
       <!-- Animated icon -->
       <div class="relative flex items-center justify-center w-20 h-20">
         <span class="absolute inset-0 rounded-full animate-ping opacity-15"
-              :class="completionState?.status === 'completed' ? 'bg-emerald-400'
+              :class="(completionState?.status === 'completed' || completionState?.status === 'skipped') ? 'bg-emerald-400'
                     : completionState?.status === 'failed'    ? 'bg-red-400' : 'bg-amber-400'"></span>
         <div class="relative w-20 h-20 rounded-full flex items-center justify-center border-2 transition-colors duration-500"
-             :class="completionState?.status === 'completed' ? 'bg-emerald-500/10 border-emerald-400/60 shadow-[0_0_30px_rgba(16,185,129,0.3)]'
+             :class="(completionState?.status === 'completed' || completionState?.status === 'skipped') ? 'bg-emerald-500/10 border-emerald-400/60 shadow-[0_0_30px_rgba(16,185,129,0.3)]'
                    : completionState?.status === 'failed'    ? 'bg-red-500/10 border-red-400/60 shadow-[0_0_30px_rgba(239,68,68,0.3)]'
                    : 'bg-amber-500/10 border-amber-400/60 shadow-[0_0_30px_rgba(245,158,11,0.3)]'">
-          <!-- Completed checkmark -->
-          <svg x-show="completionState?.status === 'completed'" class="w-10 h-10 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <!-- Completed / already-recovered checkmark -->
+          <svg x-show="completionState?.status === 'completed' || completionState?.status === 'skipped'" class="w-10 h-10 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
           </svg>
           <!-- Failed X -->
@@ -119,7 +120,7 @@
       <div x-show="completionState?.total > 0" class="text-center space-y-2.5">
         <div class="flex items-baseline justify-center gap-2">
           <span class="text-5xl font-black tabular-nums leading-none"
-                :class="completionState?.status === 'completed' ? 'text-emerald-200' : 'text-zinc-300'"
+                :class="(completionState?.status === 'completed' || completionState?.status === 'skipped') ? 'text-emerald-200' : 'text-zinc-300'"
                 style="text-shadow: 0 0 20px rgba(52,211,153,0.3)"
                 x-text="completionState?.cracked"></span>
           <div class="flex flex-col items-start">
@@ -130,11 +131,11 @@
         <!-- Recovery bar -->
         <div class="w-56 bg-zinc-800/80 rounded-full h-2.5 mx-auto overflow-hidden">
           <div class="h-2.5 rounded-full transition-all duration-1000"
-               :class="completionState?.status === 'completed' ? 'bg-emerald-400' : completionState?.status === 'failed' ? 'bg-red-500' : 'bg-amber-500'"
+               :class="(completionState?.status === 'completed' || completionState?.status === 'skipped') ? 'bg-emerald-400' : completionState?.status === 'failed' ? 'bg-red-500' : 'bg-amber-500'"
                :style="'width:' + (completionState?.total ? Math.min(100, completionState.cracked / completionState.total * 100) : 0) + '%'"></div>
         </div>
         <p class="text-sm font-semibold tabular-nums"
-           :class="completionState?.status === 'completed' ? 'text-emerald-500' : 'text-zinc-500'"
+           :class="(completionState?.status === 'completed' || completionState?.status === 'skipped') ? 'text-emerald-500' : 'text-zinc-500'"
            x-text="completionState?.total ? (completionState.cracked / completionState.total * 100).toFixed(1) + '% recovered' : ''"></p>
       </div>
 
@@ -1042,8 +1043,12 @@ function dashboardLive() {
           const done = d.recently_completed || [];
           if (done.length > 0) {
             this.showCC = true;
+            // Prefer a real completion as the headline over a sibling that was
+            // skipped because the hash file was already fully recovered — the
+            // crack is the news, not the skip.
+            const headline = done.find(j => j.status !== 'skipped') || done[0];
             window.dispatchEvent(new CustomEvent('cc-completed', {
-              detail: { job: done[0], hasMore: d.running_jobs > 0 }
+              detail: { job: headline, hasMore: d.running_jobs > 0 }
             }));
           }
         }

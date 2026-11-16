@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...database import get_db
@@ -28,6 +28,128 @@ router = APIRouter(prefix="/api/v1/agent")
 # treated as orphaned. Protects the brief window between /jobs/next marking a job
 # RUNNING and the agent's first heartbeat reporting it as current_job_id.
 _ORPHAN_GRACE_SECONDS = 120
+
+# Max values per IN(...) clause when checking recovery, to stay well under the
+# SQLite bound-parameter limit for very large hash files.
+_IN_CHUNK = 500
+
+
+# ---------------------------------------------------------------------------
+# "Fully recovered hash file" skip helpers
+# ---------------------------------------------------------------------------
+
+async def _job_hash_values(db: AsyncSession, job_id: int) -> set[str]:
+    """The set of distinct hash values making up a job's hash file."""
+    hl_sub = select(HashList.id).where(HashList.job_id == job_id).scalar_subquery()
+    rows = (await db.execute(
+        select(distinct(Hash.hash_value)).where(Hash.hash_list_id.in_(hl_sub))
+    )).scalars().all()
+    return set(rows)
+
+
+async def _recovered_values(db: AsyncSession, customer_id, values: set[str]) -> set[str]:
+    """Which of `values` are cracked (plaintext set) anywhere for this customer.
+
+    Cracks live only on the rows of the job that found them (each job keeps its
+    own copy of the hash file), so recovery is inherently cross-job: we ask which
+    of these hash values have a cracked row in any of the customer's jobs.
+    """
+    if not values:
+        return set()
+    found: set[str] = set()
+    vals = list(values)
+    for i in range(0, len(vals), _IN_CHUNK):
+        chunk = vals[i:i + _IN_CHUNK]
+        rows = (await db.execute(
+            select(distinct(Hash.hash_value))
+            .join(HashList, Hash.hash_list_id == HashList.id)
+            .join(Job, HashList.job_id == Job.id)
+            .where(
+                Job.customer_id == customer_id,
+                Hash.hash_value.in_(chunk),
+                Hash.plaintext.is_not(None),
+            )
+        )).scalars().all()
+        found.update(rows)
+    return found
+
+
+async def _hashfile_fully_recovered(db: AsyncSession, job: Job) -> bool:
+    """True when every distinct hash in this job's hash file is already cracked."""
+    values = await _job_hash_values(db, job.id)
+    if not values:
+        return False
+    recovered = await _recovered_values(db, job.customer_id, values)
+    return values.issubset(recovered)
+
+
+async def _skip_recovered_duplicate_jobs(db: AsyncSession, completed_job: Job) -> list[int]:
+    """After a job finishes, skip any other active job on the *same* hash file
+    once that hash file is fully recovered.
+
+    "Same hash file" means an identical set of distinct hash values (so it spans
+    batch siblings, reused hash lists, and separately-uploaded copies, across
+    agents). Returns the ids that were skipped.
+    """
+    # Flush this job's freshly-recorded cracks so the recovery check below (a
+    # fresh SELECT) sees them — the session has autoflush disabled.
+    await db.flush()
+
+    values = await _job_hash_values(db, completed_job.id)
+    if not values:
+        return []
+    recovered = await _recovered_values(db, completed_job.customer_id, values)
+    if not values.issubset(recovered):
+        return []
+
+    # Only active jobs on the same hash file are candidates. Pre-filter cheaply on
+    # customer + unique-hash count, then confirm by comparing the actual value set.
+    candidates = (await db.execute(
+        select(Job).where(
+            Job.id != completed_job.id,
+            Job.customer_id == completed_job.customer_id,
+            Job.total_hashes == completed_job.total_hashes,
+            Job.status.in_([JobStatus.PENDING, JobStatus.QUEUED, JobStatus.RUNNING]),
+        )
+    )).scalars().all()
+
+    skipped: list[int] = []
+    now = datetime.utcnow()
+    for cand in candidates:
+        if await _job_hash_values(db, cand.id) != values:
+            continue
+        was_running = cand.status == JobStatus.RUNNING
+        cand.status = JobStatus.SKIPPED
+        cand.completed_at = now
+        cand.phase = None
+        cand.error_message = (
+            "Skipped — all hashes in this hash file were already recovered "
+            f"by job #{completed_job.id}."
+        )
+        # A running sibling may be on another agent; tell it to stop. The race
+        # where that agent then posts its own result is handled in
+        # submit_job_result, which won't overwrite a SKIPPED job.
+        if was_running and cand.agent_id:
+            await ws_manager.send_to_agent(
+                cand.agent_id, {"type": "cancel_job", "job_id": cand.id}
+            )
+        ws_manager.clear_candidate(cand.id)
+        ws_manager.clear_recovered(cand.id)
+        await ws_manager.broadcast_job_update(cand.id, {
+            "type": "completed",
+            "job_id": cand.id,
+            "status": cand.status.value,
+            "cracked": cand.cracked_count,
+            "total": cand.total_hashes,
+        })
+        skipped.append(cand.id)
+
+    if skipped:
+        logger.info(
+            "Job %d fully recovered its hash file; skipped sibling jobs %s",
+            completed_job.id, skipped,
+        )
+    return skipped
 
 
 # ---------------------------------------------------------------------------
@@ -282,9 +404,31 @@ async def get_next_job(
         .order_by(Job.priority.asc(), Job.created_at.asc())
         .limit(1)
     )
-    job = (await db.execute(q)).scalar_one_or_none()
-    if not job:
-        return {"job": None}
+    # Skip any queued job whose hash file is already fully recovered (e.g. by a
+    # sibling that finished after this one was queued). Mark it SKIPPED and move
+    # on to the next candidate. flush() so the status change is visible to the
+    # next query (autoflush is off).
+    while True:
+        job = (await db.execute(q)).scalar_one_or_none()
+        if not job:
+            return {"job": None}
+        if await _hashfile_fully_recovered(db, job):
+            job.status = JobStatus.SKIPPED
+            job.completed_at = datetime.utcnow()
+            job.phase = None
+            job.error_message = (
+                "Skipped — all hashes in this hash file were already recovered."
+            )
+            await db.flush()
+            await ws_manager.broadcast_job_update(job.id, {
+                "type": "completed",
+                "job_id": job.id,
+                "status": job.status.value,
+                "cracked": job.cracked_count,
+                "total": job.total_hashes,
+            })
+            continue
+        break
 
     job.status = JobStatus.RUNNING
     job.started_at = datetime.utcnow()
@@ -393,15 +537,21 @@ async def submit_job_result(
     if job.agent_id != agent.id:
         raise HTTPException(status_code=403, detail="Job not assigned to this agent")
 
-    try:
-        job.status = JobStatus(payload.status)
-    except ValueError:
-        job.status = JobStatus.FAILED
+    # The job may have been SKIPPED while the agent was finishing it (a running
+    # sibling cracked the last hash and we told this agent to cancel). Keep the
+    # SKIPPED status rather than overwriting it with the agent's cancelled/failed
+    # result, but still record any hashes it managed to crack.
+    was_skipped = job.status == JobStatus.SKIPPED
 
-    job.completed_at = datetime.utcnow()
-    job.progress_pct = payload.final_progress_pct
-    job.error_message = payload.error_message
-    job.phase = None  # clear activity phase on completion
+    if not was_skipped:
+        try:
+            job.status = JobStatus(payload.status)
+        except ValueError:
+            job.status = JobStatus.FAILED
+        job.completed_at = datetime.utcnow()
+        job.progress_pct = payload.final_progress_pct
+        job.error_message = payload.error_message
+        job.phase = None  # clear activity phase on completion
     ws_manager.clear_candidate(job.id)
     ws_manager.clear_recovered(job.id)
 
@@ -448,10 +598,14 @@ async def submit_job_result(
         "total": job.total_hashes,
     })
 
-    await notify_job_complete(
-        job_id=job.id, job_name=job.name,
-        cracked=job.cracked_count, total=job.total_hashes,
-    )
+    if not was_skipped:
+        await notify_job_complete(
+            job_id=job.id, job_name=job.name,
+            cracked=job.cracked_count, total=job.total_hashes,
+        )
+        # If this job finished off the hash file, skip any other active job on
+        # the same hashes so we don't waste time cracking what's already solved.
+        await _skip_recovered_duplicate_jobs(db, job)
 
     return {"status": "accepted"}
 

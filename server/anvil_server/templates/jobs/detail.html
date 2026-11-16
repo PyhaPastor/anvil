@@ -30,7 +30,7 @@
         </button>
       </form>
       {% endif %}
-      {% if user.can_create_jobs() and job.status.value in ['failed','cancelled'] %}
+      {% if user.can_create_jobs() and job.status.value in ['failed','cancelled','skipped'] %}
       <form method="post" action="/jobs/{{ job.id }}/rerun">
         <button type="submit" class="btn-create text-xs">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,6 +251,10 @@ function jobDetail() {
           if (d.gpu_temp_c != null) this.gpuTemp = Math.round(d.gpu_temp_c);
           if (d.gpu_util_pct != null) this.gpuUtil = Math.round(d.gpu_util_pct);
           if (d.phase !== undefined) this.phase = d.phase;
+          // Live cracked count (recovered_hashes). null means "no update" for
+          // this status line; never let it decrease so the number can't flicker
+          // to 0 (mirrors the server's monotonic live-count cache).
+          if (d.recovered != null) this.cracked = Math.max(this.cracked, d.recovered);
           if (d.current_candidate) this.currentCandidate = d.current_candidate;
           if (d.phase === 'cracking') this.dlProgress = null;
         } else if (d.type === 'download_progress') {
@@ -285,7 +289,7 @@ function jobDetail() {
           this.phase = d.phase;
           if (d.hashrate != null && d.hashrate > 0) this.hashrate = Math.round(d.hashrate).toLocaleString() + ' H/s';
           if (d.eta_seconds != null) this.eta = this.fmtEta(d.eta_seconds);
-          this.cracked = d.cracked_count;
+          if (d.cracked_count != null) this.cracked = Math.max(this.cracked, d.cracked_count);
           if (d.phase === 'cracking') { this.dlProgress = null; }
           else if (d.download_progress) { this.dlProgress = d.download_progress; }
         } catch (_) {}

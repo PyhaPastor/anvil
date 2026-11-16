@@ -63,6 +63,11 @@ async def _migrate(conn) -> None:
         "CREATE INDEX ix_jobs_batch_id ON jobs (batch_id)",
         # session 9: freshness timestamp so the dashboard can detect a stalled feed
         "ALTER TABLE jobs ADD COLUMN progress_updated_at DATETIME",
+        # session 11: new "skipped" job status. On SQLite the enum is stored as a
+        # plain VARCHAR (no CHECK constraint), so nothing is needed there; this
+        # ALTER only matters for a Postgres deployment with a native enum type and
+        # is a harmless no-op elsewhere (swallowed by the try/except below).
+        "ALTER TYPE jobstatus ADD VALUE IF NOT EXISTS 'skipped'",
     ]
     for stmt in migrations:
         try:

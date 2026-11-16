@@ -363,7 +363,9 @@ async def job_detail_live(
         "progress_pct": round(job.progress_pct or 0, 1),
         "hashrate": job.hashrate,
         "eta_seconds": job.eta_seconds,
-        "cracked_count": job.cracked_count,
+        # DB cracked_count is 0 until the job ends, so fall back to the live
+        # recovered count streamed by the agent (same as the dashboard).
+        "cracked_count": max(job.cracked_count or 0, ws_manager.get_recovered(job.id)),
         "total_hashes": job.total_hashes,
         "download_progress": dl,
     })
@@ -437,8 +439,8 @@ async def rerun_job(
     original = await db.get(Job, job_id)
     if not original:
         raise HTTPException(status_code=404)
-    if original.status not in (JobStatus.FAILED, JobStatus.CANCELLED):
-        raise HTTPException(status_code=400, detail="Only failed or cancelled jobs can be re-run")
+    if original.status not in (JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.SKIPPED):
+        raise HTTPException(status_code=400, detail="Only failed, cancelled or skipped jobs can be re-run")
 
     hash_lists = (await db.execute(
         select(HashList).where(HashList.job_id == job_id)
