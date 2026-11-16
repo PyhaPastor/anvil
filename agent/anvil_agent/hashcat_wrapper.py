@@ -36,7 +36,10 @@ class ProgressEvent:
     progress_pct: float = 0.0
     hashrate_hs: float = 0.0
     eta_seconds: Optional[int] = None
-    recovered: int = 0
+    # None means "this status line carried no recovered_hashes field" — i.e. no
+    # update, as opposed to a genuine 0. The server only overwrites its live
+    # count when recovered is not None, so an absent field can't zero it out.
+    recovered: Optional[int] = None
     total: int = 0
     keys_tried: int = 0        # absolute number of passwords tested so far
     status: str = "running"    # running | exhausted | cracked | aborted | error
@@ -545,9 +548,16 @@ class HashcatWrapper:
         status = status_map.get(status_code, "running")
 
         # ── Recovered hashes ─────────────────────────────────────────────────
-        recovered_total = data.get("recovered_hashes", [0, 0])
-        recovered = recovered_total[0] if isinstance(recovered_total, list) else 0
-        total = recovered_total[1] if isinstance(recovered_total, list) and len(recovered_total) > 1 else 0
+        # recovered_hashes is [recovered, total]. When the field is absent from
+        # this status line, leave recovered as None ("no update") rather than 0,
+        # so the server's live count isn't clobbered to zero for one status tick.
+        recovered_total = data.get("recovered_hashes")
+        if isinstance(recovered_total, list) and recovered_total:
+            recovered = recovered_total[0]
+            total = recovered_total[1] if len(recovered_total) > 1 else 0
+        else:
+            recovered = None
+            total = 0
 
         # ── Current candidate ────────────────────────────────────────────────
         # For dictionary attacks, guess_base is the wordlist FILE PATH, not a word.

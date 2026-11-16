@@ -363,7 +363,9 @@ async def job_detail_live(
         "progress_pct": round(job.progress_pct or 0, 1),
         "hashrate": job.hashrate,
         "eta_seconds": job.eta_seconds,
-        "cracked_count": job.cracked_count,
+        # DB cracked_count is 0 until the job ends, so fall back to the live
+        # recovered count streamed by the agent (same as the dashboard).
+        "cracked_count": max(job.cracked_count or 0, ws_manager.get_recovered(job.id)),
         "total_hashes": job.total_hashes,
         "download_progress": dl,
     })
