@@ -88,7 +88,14 @@ class ConnectionManager:
     # ------------------------------------------------------------------
 
     def set_recovered(self, job_id: int, count: int) -> None:
-        self._recovered[job_id] = count
+        # Monotonic within a job: a job's recovered-hash count only ever climbs
+        # while it runs, so never let a lower reading overwrite a higher one.
+        # hashcat occasionally emits a status line without recovered_hashes (and
+        # a fresh/second hashcat invocation within one job starts its session
+        # count at 0), which would otherwise clobber the cached value and make
+        # the dashboard flicker to 0 for one status tick. Reset happens via
+        # clear_recovered at job end; reruns get a new job_id, so they start fresh.
+        self._recovered[job_id] = max(count, self._recovered.get(job_id, 0))
 
     def get_recovered(self, job_id: int) -> int:
         return self._recovered.get(job_id, 0)
