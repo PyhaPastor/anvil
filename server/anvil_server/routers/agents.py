@@ -411,10 +411,15 @@ fi
 echo "[3/6] Provisioning API token ..."
 AGENT_NAME=$(hostname -s 2>/dev/null || hostname)
 AGENT_HOST=$(hostname -f 2>/dev/null || hostname)
+# Set FORCE_PROVISION=1 to re-provision even if this agent is mid-job (rotates its
+# token and interrupts the running job). Default defers (server returns HTTP 409).
+FORCE=${{FORCE_PROVISION:-false}}
 
-RAW=$(curl -sfk "$SERVER/api/v1/agent/provision" \\
+# No curl -f here: on an HTTP error (e.g. 409 "agent is mid-job") we want the JSON
+# body so the message below can show the server's reason.
+RAW=$(curl -sk "$SERVER/api/v1/agent/provision" \\
     -H 'Content-Type: application/json' \\
-    -d "{{\\"provisioning_key\\":\\"$PROV_KEY\\",\\"name\\":\\"$AGENT_NAME\\",\\"hostname\\":\\"$AGENT_HOST\\"}}" \\
+    -d "{{\\"provisioning_key\\":\\"$PROV_KEY\\",\\"name\\":\\"$AGENT_NAME\\",\\"hostname\\":\\"$AGENT_HOST\\",\\"force\\":$FORCE}}" \\
     2>/dev/null) || RAW=""
 
 API_TOKEN=$(echo "$RAW" | python3 -c \\
@@ -428,6 +433,10 @@ if [[ -z "$API_TOKEN" ]]; then
     echo "  Possible causes:"
     echo "    - Server unreachable at $SERVER"
     echo "    - Provisioning key mismatch (server was re-installed?)"
+    echo "    - Agent is running a job — re-provision deferred (HTTP 409)."
+    echo "      Wait for the job to finish, or force it (rotates the token,"
+    echo "      interrupting the running job):"
+    echo "        curl -sk $SERVER/agents/install | sudo FORCE_PROVISION=1 bash"
     echo "    - See server logs: sudo journalctl -u anvil-server -n 50"
     echo ""
     echo "  Manual alternative: register from the dashboard at $SERVER/agents/register"
