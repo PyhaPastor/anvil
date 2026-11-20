@@ -18,6 +18,10 @@ class AgentConfig(BaseModel):
     poll_interval: int = 5
     verify_tls: bool = True
     ca_bundle: Optional[str] = None
+    # Consecutive HTTP 401s before the agent decides its token was rotated out
+    # from under it (re-provision) and exits so systemd restarts it with the new
+    # token from config.toml. See Bug 13.
+    auth_failure_limit: int = 3
 
     @field_validator("server_url")
     @classmethod

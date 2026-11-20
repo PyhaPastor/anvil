@@ -9,9 +9,11 @@ from pathlib import Path
 from .config import settings
 from .hardware_monitor import HardwareMonitor, get_capabilities
 from .hashcat_wrapper import kill_stray_hashcat
-from .job_runner import JobRunner
+from .job_runner import JobRunner, resubmit_pending_results
 from .server_client import (
     AgentWSClient,
+    auth_failures_exceeded,
+    consecutive_auth_failures,
     get_next_job,
     get_wordlist_cache,
     post_capabilities,
@@ -46,6 +48,24 @@ class AnvilAgent:
         self._ws = AgentWSClient()
         self._runner = JobRunner(self._hw, self._ws)
         self._shutdown = asyncio.Event()
+        self._auth_dead = False  # set when the server keeps rejecting our token
+
+    def _check_auth_dead(self) -> None:
+        """If the server has rejected our token too many times in a row, the agent
+        was almost certainly re-provisioned (token rotated in the DB while this
+        process holds the old one). Exit so systemd restarts us and reloads the
+        fresh token from config.toml (Bug 13)."""
+        if self._auth_dead or not auth_failures_exceeded():
+            return
+        self._auth_dead = True
+        logger.critical(
+            "Server rejected the agent token %d times in a row (HTTP 401). The agent "
+            "was most likely re-provisioned, rotating its token while this process kept "
+            "the old one. Exiting so systemd restarts the agent and reloads the new "
+            "token from config.toml. If this persists, re-run the agent installer.",
+            consecutive_auth_failures(),
+        )
+        self._shutdown.set()
 
     async def start(self) -> None:
         if not settings.agent.api_token:
@@ -80,6 +100,13 @@ class AnvilAgent:
         await self._hw.start()
         await self._ws.connect()
 
+        # Deliver any results a previous agent run persisted but never got the
+        # server to confirm (killed mid-submit, or token rotated under it) — Bug 13.
+        try:
+            await resubmit_pending_results()
+        except Exception as exc:
+            logger.warning("Pending-result sweep at startup failed: %s", exc)
+
         # Install signal handlers
         loop = asyncio.get_event_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -98,10 +125,21 @@ class AnvilAgent:
             await self._ws.disconnect()
             logger.info("Agent stopped.")
 
+        # If we're shutting down because the server rejected our token, exit
+        # non-zero so systemd (Restart=on-failure) restarts us with the fresh
+        # token the installer wrote to config.toml (Bug 13).
+        if self._auth_dead:
+            sys.exit(1)
+
     async def _poll_loop(self) -> None:
         """Periodically check for a new job and run it."""
         while not self._shutdown.is_set():
             if not self._runner.is_busy:
+                # While idle, retry any persisted-but-unconfirmed results (Bug 13).
+                try:
+                    await resubmit_pending_results()
+                except Exception as exc:
+                    logger.debug("Pending-result sweep failed: %s", exc)
                 try:
                     job = await get_next_job()
                     if job:
@@ -113,6 +151,7 @@ class AnvilAgent:
                         )
                 except Exception as exc:
                     logger.error("Poll error: %s", exc)
+                self._check_auth_dead()
 
             try:
                 await asyncio.wait_for(
@@ -143,6 +182,7 @@ class AnvilAgent:
                     "wordlist_cache": get_wordlist_cache(),
                 }
                 await post_heartbeat(payload)
+                self._check_auth_dead()
             except Exception as exc:
                 logger.debug("Heartbeat error: %s", exc)
 
