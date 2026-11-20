@@ -714,6 +714,8 @@ function commandCenter() {
     _hashrate: 0,
     _startedAt: null,
     _prevCracked: 0,
+    _liveCrackedKey: null,   // identity of the entity liveCracked is tracking
+    _liveCrackedMax: 0,      // non-decreasing floor for liveCracked (Bug 15)
     _tickTimer: null,
     _smoothTimer: null,
     _scanTimer: null,
@@ -898,6 +900,19 @@ function commandCenter() {
         newCracked = running.reduce((s, j) => s + (j.cracked_count || 0), 0);
         newTotal   = running.reduce((s, j) => s + (j.total_hashes  || 0), 0);
       }
+      // Clamp non-decreasing within the SAME live entity (Bug 15). At a job /
+      // batch-sibling's completion the server can momentarily report 0 cracked
+      // (the recovered cache is cleared before the crack rows commit), which must
+      // not blink this counter to 0. Reset the floor when the featured entity
+      // changes (new job/batch) so a fresh run starts from 0, not the old peak.
+      const _liveKey = primary.batch_id ? ('b:' + primary.batch_id) : ('j:' + primary.id);
+      if (_liveKey !== this._liveCrackedKey) {
+        this._liveCrackedKey = _liveKey;
+        this._liveCrackedMax = 0;
+        this._prevCracked = 0;
+      }
+      newCracked = Math.max(newCracked, this._liveCrackedMax);
+      this._liveCrackedMax = newCracked;
       if (newCracked > this._prevCracked) {
         this.crackedFlash = true;
         setTimeout(() => { this.crackedFlash = false; }, 1800);
