@@ -188,9 +188,12 @@ class HashcatWrapper:
         if self._cancelled:
             try:
                 self._proc.terminate()
-            except ProcessLookupError:
+                await asyncio.wait_for(self._proc.wait(), timeout=5)
+            except (ProcessLookupError, asyncio.TimeoutError):
                 pass
-            yield ProgressEvent(status="aborted")
+            # Even a cancel this early can race a hash that was already cracked and
+            # written to the outfile, so harvest it rather than discarding (Bug 12).
+            yield ProgressEvent(status="aborted", cracked=self._parse_outfile(outfile))
             return
 
         # Collect stderr concurrently so it doesn't block the process
@@ -214,13 +217,22 @@ class HashcatWrapper:
                 stall_timeout=settings.hashcat.stall_timeout_seconds,
             ):
                 if self._cancelled:
-                    self._proc.terminate()
-                    await stderr_task
-                    yield ProgressEvent(status="aborted")
-                    return
+                    # Stop hashcat but DON'T return early — break out and fall
+                    # through to the common outfile parse below, so hashes cracked
+                    # before the cancel are still harvested and reported (Bug 12).
+                    try:
+                        self._proc.terminate()
+                    except ProcessLookupError:
+                        pass
+                    break
                 yield event
 
-            await stderr_task
+            # Bounded: a wedged process that ignores SIGTERM must not hang us here
+            # before we reach the outfile parse — the finally below force-kills it.
+            try:
+                await asyncio.wait_for(stderr_task, timeout=5)
+            except asyncio.TimeoutError:
+                stderr_task.cancel()
         finally:
             # Ensure the subprocess is dead regardless of how the generator exits
             # (normal completion, exception, or caller dropping the async-for loop).

@@ -82,14 +82,19 @@ async def get_next_job() -> Optional[dict]:
             return None
 
 
-async def submit_result(payload: dict) -> bool:
+async def submit_result(payload: dict) -> Optional[dict]:
+    """POST a job result. Returns the server's JSON response on HTTP 200 (so the
+    caller can confirm how many cracks were persisted), or None on any failure."""
     async with _http_client() as client:
         try:
             r = await client.post("/api/v1/agent/jobs/result", json=payload)
-            return r.status_code == 200
+            if r.status_code != 200:
+                logger.error("submit_result rejected: HTTP %s %s", r.status_code, r.text[:200])
+                return None
+            return r.json()
         except httpx.HTTPError as exc:
             logger.error("submit_result failed: %s", exc)
-            return False
+            return None
 
 
 async def identify_hash(sample: str) -> List[dict]:

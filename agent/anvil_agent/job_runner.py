@@ -126,9 +126,11 @@ class JobRunner:
             self._ws.deregister_cancel(job_id)
             await self._hw.set_job_context(None, None)
             self._current_job_id = None
-            # Clean up per-job hash list files (they can be large)
-            if job_dir.exists():
-                shutil.rmtree(job_dir, ignore_errors=True)
+            # NOTE: job_dir holds the cracked outfile. It is deliberately NOT
+            # deleted here — we keep it until the server confirms it persisted the
+            # cracked results (below), so a failed or dropped submit can't silently
+            # lose plaintexts. Previously this finally (which runs *before* the
+            # submit) wiped the outfile unconditionally. See Bug 12.
 
         # Determine final status
         if cancel_event.is_set():
@@ -157,14 +159,31 @@ class JobRunner:
             "final_progress_pct": last_event.progress_pct if last_event else 0.0,
         }
 
-        ok = await submit_result(result_payload)
-        if ok:
+        # Submit, then only delete the per-job dir (which holds the cracked
+        # outfile) once the server CONFIRMS it persisted at least as many unique
+        # cracks as we sent. Otherwise keep the dir so the plaintexts survive on
+        # disk for recovery/resubmission instead of being silently lost (Bug 12).
+        unique_sent = len({c.hash_value for c in cracked_entries})
+        resp = await submit_result(result_payload)
+        confirmed = (
+            resp is not None
+            and resp.get("status") == "accepted"
+            and resp.get("cracked_recorded", 0) >= unique_sent
+        )
+        if confirmed:
             logger.info(
-                "Job %d complete: status=%s cracked=%d",
+                "Job %d complete: status=%s cracked=%d (server confirmed %d recorded)",
                 job_id, final_status, len(cracked_entries),
+                resp.get("cracked_recorded", 0),
             )
+            if job_dir.exists():
+                shutil.rmtree(job_dir, ignore_errors=True)
         else:
-            logger.error("Job %d: failed to submit result to server", job_id)
+            logger.error(
+                "Job %d: server did NOT confirm result (sent %d unique cracks, "
+                "response=%s). Keeping %s on disk so plaintexts aren't lost.",
+                job_id, unique_sent, resp, job_dir,
+            )
 
     async def _stage_hash_lists(self, job: dict, job_dir: Path) -> list[str]:
         """Download hash list files for this job. Always re-downloaded (per-job)."""
