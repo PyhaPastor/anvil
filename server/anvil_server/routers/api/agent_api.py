@@ -607,7 +607,9 @@ async def submit_job_result(
         # the same hashes so we don't waste time cracking what's already solved.
         await _skip_recovered_duplicate_jobs(db, job)
 
-    return {"status": "accepted"}
+    # Report how many unique cracks are now persisted for this job so the agent
+    # can confirm receipt before deleting its local outfile (Bug 12).
+    return {"status": "accepted", "cracked_recorded": job.cracked_count}
 
 
 @router.post("/identify-hash")
