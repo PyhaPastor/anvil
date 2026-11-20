@@ -209,6 +209,7 @@ class ProvisionPayload(BaseModel):
     provisioning_key: str
     name: str           # agent name (defaults to hostname on the install side)
     hostname: str = ""
+    force: bool = False  # override the "agent is mid-job" rotation guard (Bug 14)
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +256,27 @@ async def provision_agent(
         existing = result.scalar_one_or_none()
 
     if existing:
+        # Defer token rotation while this agent is mid-job (Bug 14). Re-provisioning
+        # rotates api_token_hash, which 401s the still-running agent process and
+        # strands the running job's result — the job 210 incident. Refuse unless the
+        # operator explicitly forces it (FORCE_PROVISION=1 in the install one-liner).
+        running_id = (await db.execute(
+            select(Job.id)
+            .where(Job.agent_id == existing.id, Job.status == JobStatus.RUNNING)
+            .order_by(Job.id.asc())
+            .limit(1)
+        )).scalar_one_or_none()
+        if running_id is not None and not payload.force:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Agent '{existing.name}' is currently running job #{running_id}. "
+                    "Re-provisioning now would rotate its token and interrupt that job "
+                    "(its results could be lost). Wait for the job to finish, or stop the "
+                    "agent first, then retry. Pass force=true (FORCE_PROVISION=1 in the "
+                    "install one-liner) to override."
+                ),
+            )
         agent = existing
         agent.name = payload.name  # allow rename on re-provision
     else:
