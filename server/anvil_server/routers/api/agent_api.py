@@ -575,7 +575,6 @@ async def submit_job_result(
         job.error_message = payload.error_message
         job.phase = None  # clear activity phase on completion
     ws_manager.clear_candidate(job.id)
-    ws_manager.clear_recovered(job.id)
 
     if payload.cracked:
         hash_lists = (await db.execute(
@@ -611,6 +610,16 @@ async def submit_job_result(
         # Update hash list counts proportionally (all belong to same job here)
         for hl in hash_lists:
             hl.cracked_count = job.cracked_count
+
+    # Persist the completed status + cracks BEFORE dropping the live recovered
+    # cache. Otherwise a concurrent dashboard_live poll can see the cache already
+    # cleared (0) AND the crack rows not yet committed (0) at the same instant,
+    # making the kiosk's live counter blink to 0 at each (batch-sibling) completion
+    # — Bug 15. Committing here makes the cracks visible to other sessions first;
+    # only then is clearing the cache safe. expire_on_commit=False keeps the ORM
+    # objects below usable after the commit.
+    await db.commit()
+    ws_manager.clear_recovered(job.id)
 
     await ws_manager.broadcast_job_update(job.id, {
         "type": "completed",
