@@ -20,6 +20,36 @@ BASE = settings.agent.server_url
 HEADERS = lambda: {"Authorization": f"Bearer {settings.agent.api_token}"}
 
 
+# --- Agent auth-failure tracking (Bug 13) ----------------------------------
+# When the server stops accepting our token (HTTP 401) every call fails and the
+# agent is wedged. This happens when the agent is re-provisioned: /provision
+# rotates api_token_hash in the DB while THIS process still holds the old token
+# in memory. We count consecutive 401s (any authenticated success resets it) and
+# let main() exit once the limit is hit, so systemd (Restart=on-failure) restarts
+# the agent and reloads the fresh token the installer wrote to config.toml.
+_consecutive_auth_failures = 0
+
+
+def _note_auth(status_code: Optional[int]) -> None:
+    """Feed every REST response's status here. 401 increments the counter; any
+    other definitive HTTP response (we got past auth) resets it; a network error
+    (status_code None) leaves it unchanged."""
+    global _consecutive_auth_failures
+    if status_code == 401:
+        _consecutive_auth_failures += 1
+    elif status_code is not None:
+        _consecutive_auth_failures = 0
+
+
+def consecutive_auth_failures() -> int:
+    return _consecutive_auth_failures
+
+
+def auth_failures_exceeded() -> bool:
+    limit = getattr(settings.agent, "auth_failure_limit", 3)
+    return _consecutive_auth_failures >= max(1, limit)
+
+
 def _ssl_context() -> ssl.SSLContext | bool:
     """Build SSL context respecting verify_tls and ca_bundle settings."""
     if not settings.agent.verify_tls:
@@ -54,6 +84,7 @@ async def post_capabilities(caps: dict) -> bool:
     async with _http_client() as client:
         try:
             r = await client.post("/api/v1/agent/capabilities", json=caps)
+            _note_auth(r.status_code)
             return r.status_code == 200
         except httpx.HTTPError as exc:
             logger.error("capabilities POST failed: %s", exc)
@@ -64,6 +95,7 @@ async def post_heartbeat(payload: dict) -> bool:
     async with _http_client() as client:
         try:
             r = await client.post("/api/v1/agent/heartbeat", json=payload)
+            _note_auth(r.status_code)
             return r.status_code == 200
         except httpx.HTTPError as exc:
             logger.debug("heartbeat failed: %s", exc)
@@ -74,6 +106,7 @@ async def get_next_job() -> Optional[dict]:
     async with _http_client() as client:
         try:
             r = await client.get("/api/v1/agent/jobs/next")
+            _note_auth(r.status_code)
             r.raise_for_status()
             data = r.json()
             return data.get("job")
@@ -82,19 +115,26 @@ async def get_next_job() -> Optional[dict]:
             return None
 
 
-async def submit_result(payload: dict) -> Optional[dict]:
-    """POST a job result. Returns the server's JSON response on HTTP 200 (so the
-    caller can confirm how many cracks were persisted), or None on any failure."""
+async def submit_result(payload: dict) -> dict:
+    """POST a job result. Returns {"status_code": int|None, "json": dict|None}:
+    status_code 200 with json means the server accepted and persisted it (the json
+    carries cracked_recorded); status_code None means a network error. Callers use
+    this to confirm persistence before deleting local crack data (Bug 12/13)."""
     async with _http_client() as client:
         try:
             r = await client.post("/api/v1/agent/jobs/result", json=payload)
+            _note_auth(r.status_code)
+            body: Optional[dict] = None
+            try:
+                body = r.json()
+            except ValueError:
+                body = None
             if r.status_code != 200:
                 logger.error("submit_result rejected: HTTP %s %s", r.status_code, r.text[:200])
-                return None
-            return r.json()
+            return {"status_code": r.status_code, "json": body}
         except httpx.HTTPError as exc:
             logger.error("submit_result failed: %s", exc)
-            return None
+            return {"status_code": None, "json": None}
 
 
 async def identify_hash(sample: str) -> List[dict]:

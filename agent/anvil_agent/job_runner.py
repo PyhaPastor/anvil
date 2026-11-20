@@ -1,6 +1,7 @@
 """Job runner — downloads required files then executes a single cracking job."""
 from __future__ import annotations
 import asyncio
+import json
 import logging
 import shutil
 import time
@@ -13,6 +14,99 @@ from .hashcat_wrapper import HashcatWrapper, ProgressEvent
 from .server_client import AgentWSClient, download_file, submit_result
 
 logger = logging.getLogger("anvil.agent.runner")
+
+
+# ---------------------------------------------------------------------------
+# Durable result delivery (Bug 13)
+#
+# A cracked result reaches the server only via submit_result. If that POST fails
+# (network blip, or — the Bug 12/210 case — a rotated token returning 401), the
+# cracks must not be lost. We persist each unconfirmed result to its job dir and
+# a sweep retries it (on startup and while idle) until the server confirms it.
+# ---------------------------------------------------------------------------
+
+def _is_confirmed(resp: dict, unique_sent: int) -> bool:
+    """A result is persisted iff the server returned 200/accepted and recorded at
+    least as many unique cracks as we sent."""
+    body = resp.get("json") or {}
+    return (
+        resp.get("status_code") == 200
+        and body.get("status") == "accepted"
+        and body.get("cracked_recorded", 0) >= unique_sent
+    )
+
+
+def _write_pending_result(job_dir: Path, payload: dict) -> None:
+    """Persist a job result to its (kept) job dir so a crash, kill, or rotated
+    token during submit can't lose the cracks — the sweep will retry it."""
+    try:
+        job_dir.mkdir(parents=True, exist_ok=True)
+        tmp = job_dir / "result.json.tmp"
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        tmp.replace(job_dir / "result.json")  # atomic within the dir
+    except OSError as exc:
+        logger.error("Could not persist pending result to %s: %s", job_dir, exc)
+
+
+def _move_aside(d: Path, dest_root: Path) -> None:
+    try:
+        dest_root.mkdir(parents=True, exist_ok=True)
+        target = dest_root / d.name
+        if target.exists():
+            target = dest_root / f"{d.name}_{int(time.time())}"
+        d.rename(target)
+    except OSError as exc:
+        logger.error("Could not move %s aside to %s: %s", d, dest_root, exc)
+
+
+async def resubmit_pending_results(current_job_id: Optional[int] = None) -> None:
+    """Re-POST any persisted-but-unconfirmed job results (Bug 13). Confirmed
+    results have their job dir removed; results the server reports as gone or
+    reassigned (403/404) are moved aside so they stop retrying forever without
+    destroying the plaintexts; anything else is left for the next sweep. The
+    actively-running job is skipped."""
+    jobs_root = Path(settings.hashcat.workdir) / "jobs"
+    if not jobs_root.is_dir():
+        return
+    undeliverable = jobs_root / "undeliverable"
+    for d in sorted(jobs_root.glob("job_*")):
+        if not d.is_dir():
+            continue
+        rf = d / "result.json"
+        if not rf.exists():
+            continue
+        try:
+            jid: Optional[int] = int(d.name.split("_", 1)[1])
+        except (IndexError, ValueError):
+            jid = None
+        if current_job_id is not None and jid == current_job_id:
+            continue
+        try:
+            payload = json.loads(rf.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            logger.error("Pending result %s is unreadable (%s); moving aside.", rf, exc)
+            _move_aside(d, undeliverable)
+            continue
+        unique_sent = len({c.get("hash_value") for c in payload.get("cracked", [])})
+        resp = await submit_result(payload)
+        if _is_confirmed(resp, unique_sent):
+            logger.info(
+                "Delivered pending result for job %s (%d unique cracks) — server confirmed.",
+                jid, unique_sent,
+            )
+            shutil.rmtree(d, ignore_errors=True)
+        elif resp.get("status_code") in (403, 404):
+            logger.error(
+                "Pending result for job %s is undeliverable (HTTP %s — job gone or "
+                "reassigned). Moving to %s instead of retrying forever.",
+                jid, resp.get("status_code"), undeliverable,
+            )
+            _move_aside(d, undeliverable)
+        else:
+            logger.warning(
+                "Pending result for job %s not yet accepted (resp=%s); will retry.",
+                jid, resp,
+            )
 
 
 class JobRunner:
@@ -164,25 +258,23 @@ class JobRunner:
         # cracks as we sent. Otherwise keep the dir so the plaintexts survive on
         # disk for recovery/resubmission instead of being silently lost (Bug 12).
         unique_sent = len({c.hash_value for c in cracked_entries})
+        # Persist to the (kept) job dir BEFORE submitting, so a crash/kill or a
+        # rotated token mid-submit can't lose the cracks; the sweep retries it.
+        _write_pending_result(job_dir, result_payload)
         resp = await submit_result(result_payload)
-        confirmed = (
-            resp is not None
-            and resp.get("status") == "accepted"
-            and resp.get("cracked_recorded", 0) >= unique_sent
-        )
-        if confirmed:
+        if _is_confirmed(resp, unique_sent):
             logger.info(
                 "Job %d complete: status=%s cracked=%d (server confirmed %d recorded)",
                 job_id, final_status, len(cracked_entries),
-                resp.get("cracked_recorded", 0),
+                (resp.get("json") or {}).get("cracked_recorded", 0),
             )
             if job_dir.exists():
                 shutil.rmtree(job_dir, ignore_errors=True)
         else:
             logger.error(
                 "Job %d: server did NOT confirm result (sent %d unique cracks, "
-                "response=%s). Keeping %s on disk so plaintexts aren't lost.",
-                job_id, unique_sent, resp, job_dir,
+                "resp=%s). Persisted to %s; the agent will retry until accepted.",
+                job_id, unique_sent, resp, job_dir / "result.json",
             )
 
     async def _stage_hash_lists(self, job: dict, job_dir: Path) -> list[str]:
